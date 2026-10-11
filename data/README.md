@@ -1,4 +1,3 @@
-<<<<<<< Updated upstream
 # NASA C-MAPSS data
 
 Source: A. Saxena and K. Goebel (2008), *Turbofan Engine Degradation
@@ -70,46 +69,3 @@ trailing spaces). The names below match `rul.data.load.COLUMNS`.
 | 24 | `s_19` | Sensor measurement 19 |
 | 25 | `s_20` | Sensor measurement 20 |
 | 26 | `s_21` | Sensor measurement 21 |
-=======
-# C-MAPSS data
-
-Source: NASA Ames Prognostics Center of Excellence, [Turbofan Engine
-Degradation Simulation dataset](https://zenodo.org/records/15346912)
-(Saxena et al., 2008). The script downloads `CMAPSSData.zip` from this record.
-
-From the repository root, run:
-
-```sh
-python scripts/download_data.py
-```
-
-Files are extracted into `data/raw/CMAPSSData/`. The script skips downloading
-when all 12 train, test, and RUL files already exist. Raw data is gitignored.
-
-## Files
-
-Each subset (`FD001`, `FD002`, `FD003`, `FD004`) provides:
-
-- `train_FD00x.txt`: engine histories continuing until failure.
-- `test_FD00x.txt`: engine histories ending before failure.
-- `RUL_FD00x.txt`: one remaining-life value in cycles per test engine, in
-  engine ID order, measured at its final recorded cycle.
-
-The archive also includes the original dataset documentation.
-
-## The 26 columns
-
-Train and test files are whitespace-separated and have no header. Each row
-represents one engine at one operating cycle. Column numbers below are 1-based.
-
-| Column | Meaning |
-|---|---|
-| 1 | Engine unit ID |
-| 2 | Operating cycle |
-| 3 | Operating setting 1 |
-| 4 | Operating setting 2 |
-| 5 | Operating setting 3 |
-| 6–26 | Sensor measurements 1–21, in order (sensor number = column − 5) |
-
-RUL files have a single column; RUL is not one of the 26 train/test columns.
->>>>>>> Stashed changes

@@ -35,31 +35,48 @@ METRIC_LABELS = {"rmse": "RMSE (cycles)", "mae": "MAE (cycles)", "nasa_score": "
 
 
 def plot_pred_vs_true(
-    y_true: ArrayLike, y_pred: ArrayLike, ax: Axes | None = None, title: str | None = None
+    y_true: ArrayLike,
+    y_pred: ArrayLike,
+    ax: Axes | None = None,
+    title: str | None = None,
+    color: str = SERIES[0],
+    limits: tuple[float, float] | None = None,
 ) -> Axes:
     """Scatter of predicted against true RUL, one point per engine.
 
     Points on the ``y = x`` line are perfect. Above it the model
     predicts too much life left (late, the costly side); below it, too little.
+    Pass the model's ``SERIES`` colour so it matches the other figures, and the
+    same ``limits`` to every panel of a figure so they can be compared.
     """
     true, pred = _paired(y_true, y_pred)
     ax = _axes(ax)
-    top = float(max(true.max(), pred.max())) * 1.05
+    low, high = limits if limits is not None else pred_vs_true_limits(true, pred)
 
-    ax.plot([0, top], [0, top], color=INK_MUTED, linewidth=1, zorder=2)
+    ax.plot([low, high], [low, high], color=INK_MUTED, linewidth=1, zorder=2)
     # Label runs along the line, just under it, where predictions are rarest.
-    ax.annotate("perfect prediction", (0.82 * top, 0.82 * top), xytext=(5, -5),
+    at = low + 0.82 * (high - low)
+    ax.annotate("perfect prediction", (at, at), xytext=(5, -5),
                 textcoords="offset points", rotation=45, rotation_mode="anchor",
                 ha="center", va="top", fontsize=8, color=INK_MUTED)
-    ax.scatter(true, pred, s=36, color=SERIES[0], edgecolors=SURFACE, linewidths=1, zorder=3)
+    ax.scatter(true, pred, s=36, color=color, edgecolors=SURFACE, linewidths=1, zorder=3)
 
-    ax.set_xlim(0, top)
-    ax.set_ylim(0, top)
+    ax.set_xlim(low, high)
+    ax.set_ylim(low, high)
     ax.set_aspect("equal")
     ax.set_xlabel("True RUL (cycles)")
     ax.set_ylabel("Predicted RUL (cycles)")
     _title(ax, title)
     return ax
+
+
+def pred_vs_true_limits(*values: ArrayLike) -> tuple[float, float]:
+    """Square axis limits that show every value: from 0 (or below, for negative
+    predictions) to the largest value, with a 5% margin."""
+    flat = np.concatenate([np.asarray(v, dtype=float).ravel() for v in values])
+    low, high = min(0.0, float(flat.min())), float(flat.max())
+    margin = 0.05 * (high - low)
+    return (low - margin if low < 0 else 0.0), high + margin
 
 
 def plot_trajectory(
@@ -68,10 +85,12 @@ def plot_trajectory(
     y_pred: ArrayLike,
     ax: Axes | None = None,
     title: str | None = None,
+    color: str = SERIES[0],
 ) -> Axes:
     """True and predicted RUL of one engine across its recorded cycles.
 
-    The true curve is the neutral reference; the prediction carries the colour.
+    The true curve is the neutral reference; the prediction carries the
+    colour, which should be the model's ``SERIES`` colour.
     """
     true, pred = _paired(y_true, y_pred)
     cycles = np.asarray(cycle)
@@ -80,7 +99,7 @@ def plot_trajectory(
     ax = _axes(ax)
 
     ax.plot(cycles, true, color=INK_SECONDARY, linewidth=2, label="True RUL", zorder=2)
-    ax.plot(cycles, pred, color=SERIES[0], linewidth=2, label="Predicted RUL", zorder=3)
+    ax.plot(cycles, pred, color=color, linewidth=2, label="Predicted RUL", zorder=3)
 
     ax.set_ylim(bottom=0)
     ax.set_xlabel("Cycle")

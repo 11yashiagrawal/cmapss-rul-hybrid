@@ -86,17 +86,19 @@ files, and 26-column format.
 
 ## Results
 
-_To be filled in as experiments complete._
+FD001 official test set: 100 engines, each scored once at its last recorded cycle against `RUL_FD001.txt`, with the uncapped RUL target. Lower is better. Phase 2 rows are filled in as experiments complete.
 
 | Model | RMSE | MAE | NASA score |
 |---|---|---|---|
-| Random Forest | – | – | – |
-| XGBoost | – | – | – |
-| Elastic Net | – | – | – |
+| Random Forest | 27.55 | 17.67 | 145,410 |
+| XGBoost | 30.50 | 19.82 | 61,202 |
+| Elastic Net | 28.39 | 23.57 | 7,777 |
 | LSTM | – | – | – |
 | Temporal CNN | – | – | – |
 | Transformer | – | – | – |
 | Hybrid | – | – | – |
+
+Phase 1 rows use the engineered features, with hyperparameters chosen by engine-grouped cross-validation on the training engines only. The NASA score adds one exponential penalty per engine, so a single badly late prediction can dominate it: one test engine accounts for 92% of Random Forest's score. With raw sensor inputs instead, RMSE is 26.15 (Random Forest), 26.84 (XGBoost) and 31.08 (Elastic Net). Stage-wise errors, figures and per-engine predictions are in [`04_ml_results.ipynb`](notebooks/phase1/04_ml_results.ipynb) and [`results/metrics/`](results/metrics/).
 
 ## Team
 

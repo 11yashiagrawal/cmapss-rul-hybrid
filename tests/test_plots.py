@@ -18,6 +18,7 @@ from rul.evaluation.plots import (  # noqa: E402
     plot_pred_vs_true,
     plot_stage_errors,
     plot_trajectory,
+    pred_vs_true_limits,
     save_figure,
 )
 
@@ -39,6 +40,38 @@ def test_pred_vs_true_draws_one_point_per_engine_and_a_perfect_prediction_line()
     assert "predicted" in ax.get_ylabel().lower()
 
 
+def test_pred_vs_true_can_draw_points_in_another_models_colour():
+    # Lets each model keep its series colour when panels sit side by side.
+    ax = plot_pred_vs_true([10, 50], [15, 40], color=SERIES[1])
+
+    assert tuple(ax.collections[0].get_facecolor()[0]) == to_rgba(SERIES[1])
+
+
+def test_pred_vs_true_keeps_negative_predictions_in_view():
+    # Linear models can predict a negative RUL; hiding those points would flatter them.
+    ax = plot_pred_vs_true([10, 50], [-20, 40])
+
+    bottom, top = ax.get_ylim()
+    assert bottom < -20 and top > 50
+    assert ax.get_xlim() == (bottom, top)  # square, so y = x stays at 45 degrees
+
+
+def test_pred_vs_true_panels_can_share_axis_limits():
+    ax = plot_pred_vs_true([10, 50], [15, 40], limits=(-50, 250))
+
+    assert ax.get_xlim() == ax.get_ylim() == (-50, 250)
+    xs, ys = ax.lines[0].get_data()
+    assert (xs[0], xs[-1]) == (ys[0], ys[-1]) == (-50, 250)
+
+
+@pytest.mark.parametrize("values, expected", [
+    (([10, 50], [15, 40]), (0, 52.5)),  # 50 plus a 5% margin; the axis starts at 0
+    (([10, 50], [-20, 40], [0, 100]), (-26, 106)),  # span -20..100, margin 6 on each side
+])
+def test_shared_limits_cover_every_panels_values(values, expected):
+    assert pred_vs_true_limits(*values) == pytest.approx(expected)
+
+
 def test_pred_vs_true_rejects_mismatched_lengths():
     with pytest.raises(ValueError, match="3 targets"):
         plot_pred_vs_true([10, 50, 120], [15, 40])
@@ -52,6 +85,13 @@ def test_trajectory_draws_true_and_predicted_rul_over_the_engines_cycles():
     assert [list(v) for v in lines["Predicted RUL"]] == [[1, 2, 3], [100, 105, 111]]
     assert ax.get_legend() is not None
     assert "cycle" in ax.get_xlabel().lower()
+
+
+def test_trajectory_can_draw_the_prediction_in_another_models_colour():
+    ax = plot_trajectory([1, 2], [114, 113], [100, 105], color=SERIES[2])
+
+    lines = {line.get_label(): line for line in ax.get_lines()}
+    assert to_rgba(lines["Predicted RUL"].get_color()) == to_rgba(SERIES[2])
 
 
 def test_trajectory_rejects_cycles_that_do_not_match_the_targets():

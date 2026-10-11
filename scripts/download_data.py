@@ -1,4 +1,3 @@
-<<<<<<< Updated upstream
 """Download NASA C-MAPSS raw files using only the Python standard library."""
 
 from io import BytesIO
@@ -53,41 +52,3 @@ def download_data() -> None:
 
 if __name__ == "__main__":
     download_data()
-=======
-"""Download NASA C-MAPSS using only the Python standard library."""
-
-from io import BytesIO
-from pathlib import Path
-from urllib.request import urlopen
-from zipfile import ZipFile
-
-
-URL = "https://zenodo.org/records/15346912/files/CMAPSSData.zip?download=1"
-DESTINATION = Path(__file__).resolve().parents[1] / "data/raw/CMAPSSData"
-FILES = [
-    f"{kind}_FD00{subset}.txt"
-    for subset in range(1, 5)
-    for kind in ("train", "test", "RUL")
-]
-
-
-def main():
-    if all((DESTINATION / name).is_file() for name in FILES):
-        print(f"C-MAPSS files already exist in {DESTINATION}; skipping download.")
-        return
-
-    print("Downloading C-MAPSS...")
-    with urlopen(URL, timeout=60) as response:
-        archive = BytesIO(response.read())
-    with ZipFile(archive) as zip_file:
-        missing = set(FILES) - set(zip_file.namelist())
-        if missing:
-            raise ValueError(f"Archive is missing expected files: {sorted(missing)}")
-        DESTINATION.mkdir(parents=True, exist_ok=True)
-        zip_file.extractall(DESTINATION)
-    print(f"Extracted C-MAPSS to {DESTINATION}")
-
-
-if __name__ == "__main__":
-    main()
->>>>>>> Stashed changes
