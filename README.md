@@ -74,15 +74,53 @@ The raw data is not committed. Download instructions are under Setup.
 
 ## Setup & reproduce
 
-Download and extract the dataset using Python (no extra dependencies):
+Use Python **3.10 or newer**. Clone `dev`, which contains the current Phase 1
+notebooks, then create and activate a virtual environment:
 
 ```sh
+git clone --branch dev https://github.com/vks-g/cmapss-rul-hybrid.git
+cd cmapss-rul-hybrid
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+On Windows, use `python -m venv .venv`, then activate with
+`.venv\Scripts\activate` in Command Prompt or `.venv\Scripts\Activate.ps1`
+in PowerShell instead of the `source` command.
+
+Install dependencies and the local package, then download the dataset:
+
+```sh
+pip install -r requirements.txt && pip install -e .
 python scripts/download_data.py
 ```
 
+In Windows PowerShell 5.1, run the two `pip install` commands separately,
+continuing only after the first succeeds (`&&` requires PowerShell 7 or newer).
+
+The editable install makes `import rul` work in notebooks and tests.
 Data is saved to `data/raw/CMAPSSData/`. If all 12 dataset files already exist,
 the download is skipped. See [`data/README.md`](data/README.md) for the source,
 files, and 26-column format.
+
+Run the tests (all should pass after downloading the data), then open JupyterLab:
+
+```sh
+pytest
+jupyter lab notebooks/phase1/
+```
+
+Use the virtual environment's Python kernel and **Restart Kernel and Run All
+Cells** in each Phase 1 notebook, in this order:
+
+1. [`01_eda.ipynb`](notebooks/phase1/01_eda.ipynb)
+2. [`02_feature_engineering.ipynb`](notebooks/phase1/02_feature_engineering.ipynb)
+   — writes feature files to `data/processed/`.
+3. [`03_ml_models.ipynb`](notebooks/phase1/03_ml_models.ipynb) — about 8 minutes.
+4. [`04_ml_results.ipynb`](notebooks/phase1/04_ml_results.ipynb) — about 4 minutes;
+   writes metrics to `results/metrics/` and figures to `results/figures/`.
+
+Runtimes depend on your hardware.
 
 ## Results
 
