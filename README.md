@@ -74,7 +74,15 @@ The raw data is not committed. Download instructions are under Setup.
 
 ## Setup & reproduce
 
-_To be added._
+Download and extract the dataset using Python (no extra dependencies):
+
+```sh
+python scripts/download_data.py
+```
+
+Data is saved to `data/raw/CMAPSSData/`. If all 12 dataset files already exist,
+the download is skipped. See [`data/README.md`](data/README.md) for the source,
+files, and 26-column format.
 
 ## Results
 
