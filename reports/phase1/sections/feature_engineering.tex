@@ -1,0 +1,121 @@
+% Feature engineering (issue #16), based on the completed notebook in issue #15.
+% Citation keys are shared with the literature review; BibTeX is supplied in #22
+% for consolidation into reports/phase1/refs.bib.
+
+\section{Feature Engineering}
+\label{sec:feature_engineering}
+
+Phase~1 represents each engine cycle by a fixed-length vector of operating
+context, sensor levels and causal summaries of recent history. This follows the
+separation of health-indicator construction from RUL prediction discussed by
+Lei et al.~\cite{Lei2018machinery}. Wang et al.~\cite{Wang2008similarity}
+estimate remaining life by matching degradation patterns to historical engines;
+our regressors instead receive explicit summaries of those patterns. The
+definitions below describe the implementation in \texttt{rul.features} and the
+completed feature-engineering notebook.
+
+\subsection{Sensor Selection and Normalized Readings}
+Sensor selection uses raw training-fold rows before normalization. The default
+rule removes only exactly constant channels; it does not assume that every
+low-variance sensor is uninformative. An optional relative-standard-deviation
+cutoff compares the population standard deviation with
+$\max(|\mathrm{mean}|,1)$ and must be chosen using training data only. On all
+official FD001 training engines, the default rule removes sensors
+$s_1,s_5,s_{10},s_{16},s_{18},s_{19}$, retaining 15 channels, including the
+varying $s_6$. The retained list is reused for held-out engines. This reduces
+redundant inputs without supervised feature selection. Khelif
+et al.~\cite{Khelif2017direct} motivate selecting informative sensors for direct
+RUL regression, although their wrapper selection differs from our variability
+filter.
+
+Operating conditions can shift sensor levels independently of degradation.
+K-means is fitted to the three unscaled operating settings from training rows,
+with one cluster for FD001/FD003 and six for FD002/FD004. The implementation
+uses seed~42 and ten initializations. Each reading is assigned to its nearest
+learned centroid, giving regime $r$, and transformed as
+\begin{equation}
+    z_{u,t,s}=\frac{x_{u,t,s}-\mu_{r,s}}{\sigma_{r,s}},
+\end{equation}
+where $u,t,s$ denote engine, cycle and sensor, and the mean and population
+standard deviation are fitted within training regime $r$. A zero standard
+deviation uses a scale of one. Retained instantaneous $z_{u,t,s}$ values remain
+predictors, preserving current condition information that averaging may hide.
+The FD002 training-only comparison for $s_2,s_3,s_{11}$ reduces regime-mean
+dispersion from about one global standard deviation to numerical zero. This
+checks removal of training mean offsets; it does not establish a prediction
+gain.
+
+\subsection{Cycle and Operating Context}
+The current \texttt{cycle} supplies an observed age proxy, allowing models to
+relate accumulated operation to remaining life. It contains no final-lifetime
+information, so engines of the same age can still receive different predictions
+from their sensors. The original \texttt{op\_1}, \texttt{op\_2},
+\texttt{op\_3} settings and learned \texttt{regime} are also retained to describe
+the current operating context after sensor normalization. Regime is stored as
+an integer in the matrix; cluster numbers are arbitrary identifiers with no
+physical ordering. FD001 has a constant regime column, retained for a
+consistent schema.
+
+\subsection{Rolling Degradation Features}
+For each retained normalized sensor, trailing windows of $w\in\{5,10,20\}$
+observations summarize short and longer histories. Let $\mathcal{H}_{u,t,w}$
+contain the current and up to $w-1$ preceding observations of engine $u$, and
+let $n=|\mathcal{H}_{u,t,w}|$. Rows are sorted by engine and cycle for
+calculation, then restored to their input order. Windows never cross engines,
+use no future readings, and use the available history at startup.
+
+\subsubsection{Rolling mean}
+The local level is
+\begin{equation}
+    m_{u,t,s,w}=\frac{1}{n}\sum_{i\in\mathcal{H}_{u,t,w}}z_{u,i,s}.
+\end{equation}
+Averaging smooths cycle-to-cycle fluctuations. Short windows respond faster;
+long windows smooth more strongly but can delay changes. These window sizes
+are implementation defaults, not claimed optimal values.
+
+\subsubsection{Rolling slope}
+The least-squares trend over the same history is
+\begin{equation}
+    b_{u,t,s,w}=
+    \frac{\sum_{i\in\mathcal{H}_{u,t,w}}(c_i-\bar{c})(z_{u,i,s}-m_{u,t,s,w})}
+         {\sum_{i\in\mathcal{H}_{u,t,w}}(c_i-\bar{c})^2},
+\end{equation}
+where $c_i$ is the recorded cycle and $\bar{c}$ its window mean. The slope is
+zero for a single observation. It captures direction and rate of change in
+normalized sensor units per cycle, complementing the local level; short-window
+slopes can be sensitive to noise.
+
+\subsubsection{Signed health change}
+The engine-relative change is
+\begin{equation}
+    h_{u,t,s,w}=m_{u,t,s,w}-z_{u,t_0,s},
+\end{equation}
+where $t_0$ is that engine's first observed cycle. This provides a baseline
+relative to each engine's initial observed condition. Unlike a calibrated
+health index, it need not be monotonic or lie in $[0,1]$; the first observation
+is not assumed fault-free. It is zero initially, and its sign depends on the
+sensor's degradation direction. Rolling summaries use regime-normalized
+readings and may span regime changes within an engine; they do not restart at
+each change of regime.
+
+\subsection{Feature Matrix and Leakage Control}
+With $S$ retained sensors and $W$ window sizes, the predictor count is
+$5+S(1+3W)$: cycle, three settings, regime, $S$ instantaneous readings and
+$3SW$ rolling features. The FD001 export therefore has 155 predictors for
+$S=15$, $W=3$, with 20,631 training rows and 13,096 test rows across 100 engines
+in each split. The notebook writes aligned train/test CSVs and a JSON manifest
+under \texttt{data/processed/}; the manifest records sensors, predictor order,
+windows, regime count, seed and fitting scope. Engine identifier
+\texttt{unit} is metadata, and uncapped training RUL is a target; neither is a
+predictor. Test features contain no target.
+
+Final exports fit selection and normalization on all official training engines.
+For engine-grouped cross-validation, both must instead be refitted within each
+training fold; globally exported features cannot be reused for tuning. Rolling
+features are computed independently within each split using only observed
+engine history. Official test scoring uses each engine's last observed cycle
+and the corresponding NASA RUL label. The notebook's training correlations
+support exploratory interpretation only: several rolling means have absolute
+Spearman correlations near 0.75 with RUL, while slopes are noisier. These
+observations do not establish held-out accuracy or a benefit from any individual
+feature group; that requires model evaluation and ablations.
