@@ -1,0 +1,184 @@
+\section{Models and Theory}
+\label{sec:models}
+
+Phase~1 treats RUL estimation as tabular regression. Each engine cycle is a
+predictor vector $\mathbf{x}_{u,t}$, either the raw cycle, settings and 21
+sensors or the engineered matrix of Section~\ref{sec:feature_engineering},
+and the target is the uncapped training RUL $y_{u,t}$. Three model families
+are compared under one protocol: a Random Forest~\cite{Breiman2001random},
+XGBoost~\cite{Chen2016xgboost} and an Elastic Net~\cite{Zou2005regularization}.
+Each is wrapped in a scikit-learn pipeline whose feature step (sensor selection,
+regime normalization, rolling features and, for the Elastic Net, scaling) is
+refitted inside every training fold, so tuning never sees statistics from the
+engines it is scored on. All three are fitted by squared error and tuned by
+grid search over three engine-grouped folds with seed~42, using
+cross-validated RMSE as the selection criterion. Under squared error, each
+model estimates the conditional mean $\mathbb{E}[y\mid\mathbf{x}]$. The
+asymmetric NASA score is reported but is not optimized, so the models are not
+deliberately biased towards early predictions.
+
+\subsection{Random Forest}
+A regression tree partitions the predictor space with axis-aligned splits.
+Each split is chosen greedily to minimize the squared error of the two
+children, and a leaf predicts the mean target of the training rows it holds.
+A deep tree has low bias but high variance: small changes in the training
+engines can change the early splits and, with them, the whole tree. A Random
+Forest~\cite{Breiman2001random} grows $B$ such trees, each on a bootstrap sample
+of rows and with only a random subset of predictors considered at every split,
+and averages their predictions. If each tree has variance $\sigma^2$ and two
+trees have pairwise correlation $\rho$, the variance of the average
+is~\cite{Hastie2009elements}
+\begin{equation}
+    \operatorname{Var}\!\left[\frac{1}{B}\sum_{b=1}^{B}T_b(\mathbf{x})\right]
+    = \rho\sigma^2 + \frac{1-\rho}{B}\sigma^2 .
+\end{equation}
+More trees remove the second term, while random predictor subsets lower
+$\rho$ and therefore the first term, which more trees cannot reduce.
+
+The method suits C-MAPSS for three reasons. Splits capture non-linear and
+interacting sensor effects without a specified functional form, such as a
+sensor that only matters late in life. Trees are invariant to monotone
+rescaling, so they need no standardization. Because each prediction is an
+average of training targets, it stays within the observed RUL range and is
+never negative. The same property means a forest cannot extrapolate beyond the
+longest training life. The implementation keeps scikit-learn's unlimited depth
+and bootstrap sampling, sets \texttt{max\_features}=0.5 so that each split
+considers half the predictors, and tunes the number of trees
+$B\in\{50,100\}$ and the minimum leaf size $\in\{1,3\}$.
+
+\subsection{XGBoost}
+Gradient boosting~\cite{Friedman2001greedy} builds an additive model
+$\hat{y}^{(M)}(\mathbf{x})=\sum_{m=1}^{M}\eta f_m(\mathbf{x})$, where each new
+tree $f_m$ is fitted to the negative gradient of the loss of the current
+ensemble. With squared error, this gradient is the residual, so every tree
+corrects what the previous trees still get wrong. Where a forest reduces
+variance by averaging independent deep trees, boosting reduces bias by adding
+shallow, dependent trees. XGBoost~\cite{Chen2016xgboost} fits each tree using a
+second-order expansion of the loss and adds an explicit complexity penalty
+\begin{equation}
+    \Omega(f)=\gamma T+\tfrac{1}{2}\lambda\sum_{j=1}^{T}w_j^2 ,
+\end{equation}
+where $T$ is the number of leaves and $w_j$ the leaf values. For squared error
+the optimal leaf value is $w_j^\ast=\sum_{i\in I_j}r_i/(|I_j|+\lambda)$, the mean
+residual $r_i$ of the $|I_j|$ rows in leaf $j$ shrunk towards zero, so small
+leaves move the prediction less.
+
+XGBoost suits the problem for the same non-linearity reasons as the forest and
+usually reaches lower bias, at the cost of more hyperparameters that interact.
+The implementation uses the squared-error objective and the histogram tree
+method. It keeps the library defaults for the learning rate ($\eta=0.3$),
+$\lambda=1$, $\gamma=0$ and row and column subsampling (none), and tunes the
+number of trees $M\in\{100,200\}$ and the maximum depth $\in\{3,5\}$.
+
+\subsection{Elastic Net}
+The Elastic Net~\cite{Zou2005regularization} is linear regression with a
+combined penalty. In the parameterization used by scikit-learn it solves
+\begin{equation}
+    \min_{\beta_0,\boldsymbol{\beta}}\;
+    \frac{1}{2N}\sum_{i=1}^{N}\bigl(y_i-\beta_0-\mathbf{x}_i^{\top}\boldsymbol{\beta}\bigr)^2
+    +\alpha\rho\lVert\boldsymbol{\beta}\rVert_1
+    +\frac{\alpha(1-\rho)}{2}\lVert\boldsymbol{\beta}\rVert_2^2 ,
+\end{equation}
+where $\alpha$ sets the overall strength and the ratio $\rho$ moves between
+ridge ($\rho=0$) and lasso ($\rho=1$). The $\ell_1$ term sets some coefficients
+exactly to zero, giving a sparse model. The $\ell_2$ term stabilizes the
+solution when predictors are correlated and produces the grouping effect:
+correlated predictors receive similar coefficients instead of one being
+selected arbitrarily. C-MAPSS sensors that respond to the same degradation are
+strongly correlated, and the engineered matrix adds three rolling summaries of
+each sensor at three windows, so this property is directly relevant. Because
+the penalty depends on coefficient size, predictors are standardized inside
+each training fold before fitting.
+
+The Elastic Net is the linear reference. If it matched the trees, non-linear
+models would be unnecessary; its coefficients are also directly interpretable.
+Its limitations follow from linearity. It cannot represent a flat RUL
+relationship early in life followed by a steep decline, and its predictions
+are unbounded, so a test engine can receive a negative RUL. The implementation
+tunes $\alpha\in\{0.1,1.0\}$ and $\rho\in\{0.2,0.8\}$ and allows 20,000
+coordinate-descent iterations.
+
+\subsection{Bias, Variance and Regularization}
+For squared error, the expected error of a fitted model $\hat{f}$ at a point
+$\mathbf{x}$ splits into three parts~\cite{Geman1992neural,Hastie2009elements}:
+\begin{equation}
+    \mathbb{E}\bigl[(y-\hat{f}(\mathbf{x}))^2\bigr]
+    =\sigma^2(\mathbf{x})
+    +\bigl(\mathbb{E}[\hat{f}(\mathbf{x})]-f(\mathbf{x})\bigr)^2
+    +\operatorname{Var}\bigl[\hat{f}(\mathbf{x})\bigr],
+\end{equation}
+the irreducible noise, the squared bias and the variance, where
+$f(\mathbf{x})=\mathbb{E}[y\mid\mathbf{x}]$ and the expectation is over training
+sets. Each tuned hyperparameter moves a model along this trade-off.
+In the forest, a larger minimum leaf size averages more rows per leaf, raising
+bias and lowering variance, and \texttt{max\_features} lowers the correlation
+$\rho$. In XGBoost, greater depth and more trees lower bias and raise variance,
+while the learning rate and $\lambda$ shrink each tree's contribution. In the
+Elastic Net, a larger $\alpha$ shrinks all coefficients, accepting bias for
+lower variance.
+
+Table~\ref{tab:model_selection} lists the configurations selected on all 100
+FD001 training engines. On engineered features, cross-validation chose the
+more flexible end of each tree grid (leaf size~1; depth~5 with 200 trees),
+while on raw features it chose the simpler end. The Elastic Net chose stronger
+shrinkage with a larger ridge share on the engineered matrix, consistent with
+its many correlated rolling features, although the fold variation is too
+large to treat this as more than suggestive. The differences in CV RMSE between models and between feature sets are
+smaller than the standard deviation across folds, so cross-validation alone
+does not establish a preferred model.
+
+\begin{table}[t]
+\centering
+\caption{Grid-search selections on the FD001 training engines (three
+engine-grouped folds, seed 42). CV RMSE is the mean $\pm$ standard deviation
+over folds, in cycles.}
+\label{tab:model_selection}
+\begin{tabular}{llll}
+\hline
+Model & Features & Selected & CV RMSE \\
+\hline
+Random Forest & raw        & $B=100$, leaf 3          & $37.6\pm3.8$ \\
+Random Forest & engineered & $B=100$, leaf 1          & $36.4\pm5.0$ \\
+XGBoost       & raw        & $M=100$, depth 3         & $38.1\pm3.7$ \\
+XGBoost       & engineered & $M=200$, depth 5         & $38.0\pm5.1$ \\
+Elastic Net   & raw        & $\alpha=0.1$, $\rho=0.8$ & $40.7\pm4.8$ \\
+Elastic Net   & engineered & $\alpha=1.0$, $\rho=0.2$ & $41.8\pm3.8$ \\
+\hline
+\end{tabular}
+\end{table}
+
+The uncapped target adds a large noise term. FD001 training engines lived
+between 128 and 362 cycles. Early in life, before degradation is visible in the
+sensors, engines of the same age look alike but have very different remaining
+lives, so $\sigma^2(\mathbf{x})$ is large and no model can remove it. Tree SHAP
+on the engineered models attributes far more of each prediction to
+\texttt{cycle} than to any sensor feature, which shows that the models fall back on
+an age-based estimate where sensors carry little signal. Correspondingly, the
+tree models' test RMSE is two to eight times larger for engines in the early
+stage than in the late stage. This is why much of the
+literature caps the training target at a constant early in
+life~\cite{Heimes2008recurrent,Zheng2017long}: capping removes much of this
+noise. It also changes the quantity being predicted, so this project keeps the
+uncapped target as primary and treats capping as an ablation.
+
+Two limitations of the tuning follow from this framing. Each grid has two
+values per hyperparameter, and several selections lie on a grid boundary, so
+the optimum may lie outside the searched range. The XGBoost learning rate,
+which controls variance together with the number of trees, is fixed at its
+default rather than tuned. Wider grids would let the trade-off be located
+rather than bracketed.
+
+\subsection{Machine Learning for RUL}
+Tree ensembles and regularized regressors are established data-driven
+prognostic tools. Wu et al.~\cite{Wu2017comparative} compared Random Forests
+with feed-forward neural networks and support vector regression for tool-wear
+prediction on 315 milling tests and found the forest the most accurate.
+On C-MAPSS, Wang et al.~\cite{Wang2023remaining} used Random Forest importance
+to select engine parameters before training a multilayer perceptron, using the
+forest for feature selection rather than as the final predictor.
+Mathew et al.~\cite{Mathew2017prediction} compared a range of classical
+regressors on the same turbofan data, and Khelif
+et al.~\cite{Khelif2017direct} used support vector regression for direct RUL
+estimation. Our baselines differ from these studies by evaluating all three
+families under one engine-grouped protocol with fold-fitted preprocessing,
+which provides the reference for the Phase~2 sequence models.
