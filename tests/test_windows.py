@@ -7,7 +7,7 @@ import torch
 
 from rul.data.labels import add_train_rul
 from rul.data.load import SENSOR_COLS, SETTING_COLS
-from rul.features.windows import make_windows
+from rul.features.windows import WindowDataset, make_windows
 
 
 def engines(lengths: dict[int, int], seed: int = 0) -> pd.DataFrame:
@@ -96,3 +96,16 @@ def test_rejects_bad_window_settings():
         make_windows(tagged({1: 5}), FEATURES, window=0)
     with pytest.raises(ValueError):
         make_windows(tagged({1: 5}), FEATURES, stride=0)
+
+
+def test_dataset_returns_window_and_target_tensors():
+    data = WindowDataset(make_windows(tagged({1: 20, 2: 15}), FEATURES, window=8))
+    x, y = data[0]
+    assert len(data) == 35
+    assert x.shape == (8, 2) and x.dtype == torch.float32
+    assert y.shape == () and y.dtype == torch.float32
+
+
+def test_dataset_needs_labels():
+    with pytest.raises(ValueError):
+        WindowDataset(make_windows(tagged({1: 5}), FEATURES, target_column=None))

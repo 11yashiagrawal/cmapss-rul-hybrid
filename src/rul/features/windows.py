@@ -93,3 +93,19 @@ def make_windows(
     X = np.ascontiguousarray(np.concatenate(windows), dtype=np.float32)
     y = np.concatenate(labels) if target_column is not None else None
     return SequenceWindows(X, y, pd.concat(index, ignore_index=True))
+
+
+class WindowDataset(Dataset):
+    """PyTorch dataset of ``(window, target)`` pairs, windows shaped ``[window, features]``."""
+
+    def __init__(self, windows: SequenceWindows) -> None:
+        if windows.y is None:
+            raise ValueError("WindowDataset needs labelled windows (target_column set)")
+        self.X = torch.from_numpy(windows.X)
+        self.y = torch.from_numpy(windows.y)
+
+    def __len__(self) -> int:
+        return len(self.X)
+
+    def __getitem__(self, i: int) -> tuple[torch.Tensor, torch.Tensor]:
+        return self.X[i], self.y[i]
