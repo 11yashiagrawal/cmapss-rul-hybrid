@@ -2,7 +2,7 @@ import pytest
 import torch
 from torch import nn
 
-from rul.models.base import SequenceEncoder
+from rul.models.base import RegressionHead, SequenceEncoder
 
 BATCH, WINDOW, FEATURES, DIM = 4, 30, 15, 8
 
@@ -33,3 +33,11 @@ def test_encoder_maps_windows_to_embeddings(windows):
 def test_base_encoder_requires_forward(windows):
     with pytest.raises(NotImplementedError):
         SequenceEncoder(DIM)(windows)
+
+
+@pytest.mark.parametrize("bad", [0, -3])
+def test_rejects_non_positive_dims(bad):
+    with pytest.raises(ValueError):
+        SequenceEncoder(bad)
+    with pytest.raises(ValueError):
+        RegressionHead(bad)
