@@ -2,10 +2,17 @@
 
 import json
 
+import numpy as np
 import pandas as pd
+import pytest
 
 from rul.data.load import SENSOR_COLS, SETTING_COLS
-from rul.features.matrix import build_feature_matrices, save_feature_matrices
+from rul.features.matrix import (
+    FEATURE_GROUPS,
+    build_feature_matrices,
+    feature_group_columns,
+    save_feature_matrices,
+)
 
 
 def cycles(offset: float = 0.0, length: int = 3) -> pd.DataFrame:
@@ -53,3 +60,11 @@ def test_save_matrices_writes_reproducible_manifest(tmp_path):
     assert manifest["windows"] == [2]
     assert manifest["train_rows"] == 6
     assert manifest["test_rows"] == 4
+
+
+def test_rejects_unknown_or_empty_groups():
+    with pytest.raises(ValueError):
+        feature_group_columns(["cycle"], [], ("age", "settings"))
+    with pytest.raises(ValueError):
+        feature_group_columns(["cycle"], [], ())
+    assert set(FEATURE_GROUPS) == {"age", "sensors", "mean", "slope", "health"}

@@ -5,13 +5,18 @@ import json
 from pathlib import Path
 from typing import NamedTuple
 
+import numpy as np
 import pandas as pd
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.preprocessing import StandardScaler
+from sklearn.utils.validation import check_is_fitted
 
 from rul.data.labels import add_train_rul
 from rul.data.load import SETTING_COLS
 from rul.features.cleaning import select_sensors
 from rul.features.regimes import RegimeNormalizer
 from rul.features.rolling import add_rolling_features
+from rul.models.experiment import EngineFeatures
 
 
 class FeatureMatrices(NamedTuple):
@@ -88,3 +93,34 @@ def save_feature_matrices(
     }
     paths["manifest"].write_text(json.dumps(manifest, indent=2) + "\n")
     return paths
+
+
+FEATURE_GROUPS = ("age", "sensors", "mean", "slope", "health")
+
+
+def feature_group_columns(
+    feature_names: Sequence[str], sensors: Sequence[str], groups: Sequence[str]
+) -> list[str]:
+    """Pick the engineered columns that belong to the requested feature groups.
+
+    Groups: ``age`` (``cycle``), ``sensors`` (current scaled readings), and the
+    rolling ``mean``, ``slope`` and ``health`` features. Operating settings and
+    the regime label are not included: regime scaling already removes their
+    effect from the sensors.
+    """
+    unknown = sorted(set(groups) - set(FEATURE_GROUPS))
+    if unknown or not groups:
+        raise ValueError(f"groups must be a non-empty subset of {FEATURE_GROUPS}, got {list(groups)}")
+    sensors = set(sensors)
+
+    def group_of(name: str) -> str | None:
+        if name == "cycle":
+            return "age"
+        if name in sensors:
+            return "sensors"
+        parts = name.rsplit("_", 2)
+        if len(parts) == 3 and parts[0] in sensors and parts[1] in ("mean", "slope", "health"):
+            return parts[1]
+        return None
+
+    return [name for name in feature_names if group_of(name) in groups]
