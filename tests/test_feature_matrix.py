@@ -9,6 +9,7 @@ import pytest
 from rul.data.load import SENSOR_COLS, SETTING_COLS
 from rul.features.matrix import (
     FEATURE_GROUPS,
+    HybridFeatures,
     build_feature_matrices,
     feature_group_columns,
     save_feature_matrices,
@@ -60,6 +61,63 @@ def test_save_matrices_writes_reproducible_manifest(tmp_path):
     assert manifest["windows"] == [2]
     assert manifest["train_rows"] == 6
     assert manifest["test_rows"] == 4
+
+
+def engines(lengths: dict[int, int], offset: float = 0.0, seed: int = 0) -> pd.DataFrame:
+    """Engines with two drifting sensors; the other sensors are flat."""
+    rng = np.random.default_rng(seed)
+    rows = []
+    for unit, n in lengths.items():
+        for cycle in range(1, n + 1):
+            row = {"unit": unit, "cycle": cycle, **dict.fromkeys(SETTING_COLS, 0.0)}
+            row.update(dict.fromkeys(SENSOR_COLS, 1.0))
+            row["s_2"] = 600 + 0.3 * cycle + rng.normal() + offset
+            row["s_7"] = 550 - 0.2 * cycle + rng.normal() + offset
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+WINDOWS = (2, 4)
+
+
+def test_hybrid_features_keep_input_rows_and_order():
+    train = engines({1: 12, 2: 10})
+    shuffled = train.sample(frac=1, random_state=1)
+    out = HybridFeatures(windows=WINDOWS).fit(train).transform(shuffled)
+    assert out.index.equals(shuffled.index)
+    assert out[["unit", "cycle"]].equals(shuffled[["unit", "cycle"]])
+
+
+def test_hybrid_features_are_scaled_with_training_statistics():
+    train, test = engines({1: 15, 2: 12}), engines({9: 8}, offset=500, seed=3)
+    model = HybridFeatures(windows=WINDOWS).fit(train)
+    train_out = model.transform(train).drop(columns=["unit", "cycle"])
+    np.testing.assert_allclose(train_out.mean(), 0, atol=1e-9)
+    assert model.transform(test)["s_2"].min() > 50  # test drift is not scaled away
+
+
+@pytest.mark.parametrize(
+    ("groups", "expected"),
+    [
+        (("age",), ["age"]),
+        (("sensors",), ["s_2", "s_7"]),
+        (("mean",), ["s_2_mean_2", "s_7_mean_2", "s_2_mean_4", "s_7_mean_4"]),
+        (("slope", "health"), [
+            "s_2_slope_2", "s_2_health_2", "s_7_slope_2", "s_7_health_2",
+            "s_2_slope_4", "s_2_health_4", "s_7_slope_4", "s_7_health_4",
+        ]),
+    ],
+)
+def test_each_group_returns_its_columns(groups, expected):
+    model = HybridFeatures(windows=WINDOWS, groups=groups).fit(engines({1: 10, 2: 9}))
+    assert model.output_columns_ == expected
+    assert list(model.transform(engines({3: 5})).columns) == ["unit", "cycle", *expected]
+
+
+def test_all_groups_cover_every_degradation_feature():
+    model = HybridFeatures(windows=WINDOWS).fit(engines({1: 10, 2: 9}))
+    assert len(model.output_columns_) == 1 + 2 + 2 * 2 * 3  # age, sensors, 3 rolling x 2 windows
+    assert not {"op_1", "op_2", "op_3", "regime"} & set(model.output_columns_)
 
 
 def test_rejects_unknown_or_empty_groups():

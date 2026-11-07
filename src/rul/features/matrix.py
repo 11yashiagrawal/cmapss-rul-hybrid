@@ -124,3 +124,59 @@ def feature_group_columns(
         return None
 
     return [name for name in feature_names if group_of(name) in groups]
+
+
+class HybridFeatures(TransformerMixin, BaseEstimator):
+    """Engineered Phase 1 features for the hybrid's feature branch, one row per cycle.
+
+    Fits sensor selection, regime scaling and a standard scaler on one fold's
+    training engines (reusing :class:`rul.models.experiment.EngineFeatures`),
+    then returns ``unit``, ``cycle`` and the scaled features of the chosen
+    groups for every row, in the input order. Rolling features only look back,
+    so each row uses its own and earlier cycles.
+
+    Args:
+        n_regimes: Operating regimes for regime scaling (1 on FD001).
+        windows: Rolling windows, as in Phase 1.
+        groups: Feature groups to keep, from :data:`FEATURE_GROUPS` (ablations in #69).
+        seed: Seed for the regime clustering.
+    """
+
+    def __init__(
+        self,
+        n_regimes: int = 1,
+        windows: tuple[int, ...] = (5, 10, 20),
+        groups: tuple[str, ...] = FEATURE_GROUPS,
+        seed: int = 42,
+    ) -> None:
+        self.n_regimes = n_regimes
+        self.windows = windows
+        self.groups = groups
+        self.seed = seed
+
+    def fit(self, train: pd.DataFrame, y: object = None) -> "HybridFeatures":
+        """Learn preprocessing and feature scaling from training engines only."""
+        self.engine_features_ = EngineFeatures(
+            engineered=True, n_regimes=self.n_regimes, windows=tuple(self.windows), seed=self.seed
+        ).fit(train)
+        self.feature_columns_ = feature_group_columns(
+            self.engine_features_.feature_names_, self.engine_features_.sensors_, self.groups
+        )
+        raw = self.engine_features_.transform(train)[self.feature_columns_]
+        self.scaler_ = StandardScaler().fit(raw.to_numpy(dtype=float))
+        self.output_columns_ = ["age" if c == "cycle" else c for c in self.feature_columns_]
+        return self
+
+    def transform(self, frame: pd.DataFrame) -> pd.DataFrame:
+        """Return ``unit``, ``cycle`` and scaled features for every row of ``frame``.
+
+        The scaled cycle index (the ``age`` group) is named ``age`` so it does
+        not clash with the ``cycle`` key.
+        """
+        check_is_fitted(self, "feature_columns_")
+        raw = self.engine_features_.transform(frame)[self.feature_columns_]
+        scaled = self.scaler_.transform(raw.to_numpy(dtype=float))
+        out = pd.DataFrame(scaled, columns=self.output_columns_, index=frame.index)
+        out.insert(0, "cycle", frame["cycle"].to_numpy())
+        out.insert(0, "unit", frame["unit"].to_numpy())
+        return out
