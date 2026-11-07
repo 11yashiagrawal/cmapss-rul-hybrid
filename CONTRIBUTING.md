@@ -91,4 +91,5 @@ Each commit should do one thing. "wip", "update", and "changes" are not commit m
 - **Tuning and ablations** are scored on held-out training engines with the selection metric from #55, never on the official test set.
 - **Early stopping** uses an engine-level holdout inside the training fold. The final refit trains on all training engines for the median best epoch across folds.
 - **The official test runs once**, after the model freeze, through #71. No model or config changes after it.
+- Every sequence model implements `rul.models.base.SequenceEncoder` (`[batch, window, features] -> [batch, output_dim]`) and is wrapped in `SequenceRegressor`, so the trainer, ablations and hybrids treat all of them the same way.
 - Report RMSE, MAE and NASA score, plus error by true-RUL stage (early / mid / late), using `rul.evaluation.metrics` for every model.
