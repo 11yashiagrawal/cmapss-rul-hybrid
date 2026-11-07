@@ -178,3 +178,58 @@ def paired_wilcoxon(y_true, comparisons: Mapping[str, tuple]) -> dict:
     for result, p_holm in zip(raw.values(), adjusted):
         result["p_holm"] = float(p_holm)
     return raw
+
+
+def value_test(
+    y_true,
+    comparisons: Mapping[str, tuple],
+    *,
+    alpha: float = 0.05,
+    n_boot: int = 10_000,
+    seed: int = 42,
+) -> dict:
+    """Apply the fixed value test from #83 to each hybrid-versus-branch comparison.
+
+    Args:
+        y_true: True RUL per engine.
+        comparisons: ``{name: (hybrid_pred, branch_pred)}``, each ``[engines]``
+            or ``[seeds, engines]``. Wilcoxon p-values are Holm-corrected across
+            all comparisons given here.
+
+    Returns:
+        ``{name: {"adds_value", "criteria": {...}, "evidence": {...}}}``, where
+        ``adds_value`` is True if any of the three criteria holds; otherwise the
+        result is a null result.
+    """
+    true = np.asarray(y_true, dtype=float)
+    tests = paired_wilcoxon(true, comparisons)
+    verdicts = {}
+    for name, (hybrid, branch) in comparisons.items():
+        diff = paired_bootstrap_diff(
+            true, hybrid, branch, "rmse", n_boot=n_boot, alpha=alpha, seed=seed
+        )
+        rmse_h = np.sqrt(np.mean(_as_runs(true, hybrid) ** 2, axis=1))
+        rmse_b = np.sqrt(np.mean(_as_runs(true, branch) ** 2, axis=1))
+        std_h = float(rmse_h.std(ddof=1)) if rmse_h.size > 1 else None
+        std_b = float(rmse_b.std(ddof=1)) if rmse_b.size > 1 else None
+        test = tests[name]
+        criteria = {
+            "bootstrap_ci_below_zero": diff["high"] < 0,
+            "wilcoxon_holm": test["p_holm"] < alpha
+            and test["median_abs_error_a"] < test["median_abs_error_b"],
+            "lower_seed_variance": std_h is not None
+            and std_b is not None
+            and std_h < std_b
+            and (rmse_h.mean() <= rmse_b.mean() or np.isclose(rmse_h.mean(), rmse_b.mean())),
+        }
+        verdicts[name] = {
+            "adds_value": any(criteria.values()),
+            "criteria": criteria,
+            "evidence": {
+                "rmse_difference": diff,
+                "wilcoxon": test,
+                "rmse_hybrid": {"mean": float(rmse_h.mean()), "std": std_h},
+                "rmse_branch": {"mean": float(rmse_b.mean()), "std": std_b},
+            },
+        }
+    return verdicts

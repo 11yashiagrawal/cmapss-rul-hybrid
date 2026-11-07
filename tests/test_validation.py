@@ -10,6 +10,7 @@ from rul.evaluation.validation import (
     holm_correction,
     paired_bootstrap_diff,
     paired_wilcoxon,
+    value_test,
 )
 
 TRUE = np.linspace(10, 150, 60)
@@ -71,6 +72,33 @@ def test_wilcoxon_detects_a_clearly_better_model_and_corrects_the_family():
     assert result["better"]["p"] < 1e-6
     assert result["better"]["p_holm"] == pytest.approx(2 * result["better"]["p"])
     assert result["same"]["p"] == 1.0
+
+
+def test_value_test_accepts_a_clearly_better_hybrid():
+    rng = np.random.default_rng(3)
+    hybrid = TRUE + rng.normal(0, 3, (5, TRUE.size))
+    branch = TRUE + rng.normal(0, 15, (5, TRUE.size))
+    verdict = value_test(TRUE, {"hybrid_a": (hybrid, branch)}, n_boot=1000)["hybrid_a"]
+    assert verdict["adds_value"]
+    assert verdict["criteria"]["bootstrap_ci_below_zero"]
+    assert verdict["criteria"]["wilcoxon_holm"]
+
+
+def test_value_test_reports_a_null_result_for_an_equal_hybrid():
+    pred = TRUE + np.random.default_rng(4).normal(0, 10, (3, TRUE.size))
+    verdict = value_test(TRUE, {"hybrid_b": (pred, pred)}, n_boot=500)["hybrid_b"]
+    assert not verdict["adds_value"]
+    assert not any(verdict["criteria"].values())
+
+
+def test_value_test_credits_lower_seed_variance_alone():
+    noise = np.random.default_rng(5).normal(0, 10, TRUE.size)
+    hybrid = np.stack([TRUE + noise * s for s in (0.98, 1.0, 1.02)])  # steady
+    branch = np.stack([TRUE + noise * s for s in (0.7, 1.0, 1.3)])  # same mean, more spread
+    verdict = value_test(TRUE, {"h": (hybrid, branch)}, n_boot=500)["h"]
+    assert verdict["criteria"]["lower_seed_variance"]
+    assert not verdict["criteria"]["bootstrap_ci_below_zero"]
+    assert verdict["adds_value"]
 
 
 def test_rejects_mismatched_engine_counts():
