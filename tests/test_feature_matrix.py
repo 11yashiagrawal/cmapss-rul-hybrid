@@ -96,6 +96,16 @@ def test_hybrid_features_are_scaled_with_training_statistics():
     assert model.transform(test)["s_2"].min() > 50  # test drift is not scaled away
 
 
+def test_hybrid_features_use_only_past_cycles():
+    full = engines({1: 15})
+    future_changed = full.copy()
+    future_changed.loc[full["cycle"] > 8, ["s_2", "s_7"]] += 1000
+    model = HybridFeatures(windows=WINDOWS).fit(engines({1: 15, 2: 12}))
+    a = model.transform(full)[full["cycle"] <= 8]
+    b = model.transform(future_changed)[future_changed["cycle"] <= 8]
+    pd.testing.assert_frame_equal(a, b)
+
+
 @pytest.mark.parametrize(
     ("groups", "expected"),
     [
