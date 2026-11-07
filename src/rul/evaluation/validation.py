@@ -134,3 +134,47 @@ def paired_bootstrap_diff(
         "high": high,
         "excludes_zero": bool(low > 0 or high < 0),
     }
+
+
+def holm_correction(pvalues: Sequence[float]) -> np.ndarray:
+    """Holm-Bonferroni adjusted p-values, in the input order (capped at 1)."""
+    p = np.asarray(pvalues, dtype=float)
+    order = np.argsort(p)
+    scaled = p[order] * (p.size - np.arange(p.size))
+    adjusted = np.empty_like(p)
+    adjusted[order] = np.minimum(np.maximum.accumulate(scaled), 1.0)
+    return adjusted
+
+
+def paired_wilcoxon(y_true, comparisons: Mapping[str, tuple]) -> dict:
+    """Wilcoxon signed-rank tests on per-engine absolute error, Holm-corrected.
+
+    Args:
+        y_true: True RUL per engine.
+        comparisons: ``{name: (pred_a, pred_b)}``; the correction runs across
+            all of them as one family.
+
+    Returns:
+        ``{name: {"statistic", "p", "p_holm", "median_abs_error_a",
+        "median_abs_error_b"}}``. Identical errors give ``p = 1``.
+    """
+    true = np.asarray(y_true, dtype=float)
+    raw = {}
+    for name, (pred_a, pred_b) in comparisons.items():
+        abs_a = np.abs(_as_runs(true, pred_a)).mean(axis=0)
+        abs_b = np.abs(_as_runs(true, pred_b)).mean(axis=0)
+        if np.allclose(abs_a, abs_b):
+            statistic, p = 0.0, 1.0
+        else:
+            test = wilcoxon(abs_a, abs_b)
+            statistic, p = float(test.statistic), float(test.pvalue)
+        raw[name] = {
+            "statistic": statistic,
+            "p": p,
+            "median_abs_error_a": float(np.median(abs_a)),
+            "median_abs_error_b": float(np.median(abs_b)),
+        }
+    adjusted = holm_correction([r["p"] for r in raw.values()])
+    for result, p_holm in zip(raw.values(), adjusted):
+        result["p_holm"] = float(p_holm)
+    return raw

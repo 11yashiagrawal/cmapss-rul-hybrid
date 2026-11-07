@@ -7,7 +7,9 @@ from rul.evaluation.metrics import evaluate
 from rul.evaluation.validation import (
     aggregate_seeds,
     bootstrap_ci,
+    holm_correction,
     paired_bootstrap_diff,
+    paired_wilcoxon,
 )
 
 TRUE = np.linspace(10, 150, 60)
@@ -53,6 +55,22 @@ def test_paired_difference_of_identical_models_is_zero():
     pred = TRUE + np.random.default_rng(1).normal(0, 8, TRUE.size)
     diff = paired_bootstrap_diff(TRUE, pred, pred, n_boot=500)
     assert diff["difference"] == 0 and not diff["excludes_zero"]
+
+
+def test_holm_correction_matches_hand_calculation():
+    # sorted: 0.01*3 = 0.03, 0.03*2 = 0.06, 0.04*1 = 0.04 -> kept monotone at 0.06
+    np.testing.assert_allclose(holm_correction([0.01, 0.04, 0.03]), [0.03, 0.06, 0.06])
+    assert holm_correction([0.6, 0.9]).max() == 1.0
+
+
+def test_wilcoxon_detects_a_clearly_better_model_and_corrects_the_family():
+    rng = np.random.default_rng(2)
+    good = TRUE + rng.normal(0, 2, TRUE.size)
+    bad = TRUE + rng.normal(0, 20, TRUE.size)
+    result = paired_wilcoxon(TRUE, {"better": (good, bad), "same": (good, good)})
+    assert result["better"]["p"] < 1e-6
+    assert result["better"]["p_holm"] == pytest.approx(2 * result["better"]["p"])
+    assert result["same"]["p"] == 1.0
 
 
 def test_rejects_mismatched_engine_counts():
