@@ -109,3 +109,39 @@ class WindowDataset(Dataset):
 
     def __getitem__(self, i: int) -> tuple[torch.Tensor, torch.Tensor]:
         return self.X[i], self.y[i]
+
+
+class WindowPreprocessor(TransformerMixin, BaseEstimator):
+    """Fold-safe sensor selection and regime scaling for window inputs.
+
+    Fit on one fold's training engines only; transform any frame with those
+    statistics.
+
+    Args:
+        n_regimes: Operating regimes for :class:`RegimeNormalizer` (1 on FD001).
+        include_cycle: Add the cycle index as an input, z-scored with
+            training statistics (an ablation in #69).
+        seed: Seed for the regime clustering.
+    """
+
+    def __init__(self, n_regimes: int = 1, include_cycle: bool = False, seed: int = 42) -> None:
+        self.n_regimes = n_regimes
+        self.include_cycle = include_cycle
+        self.seed = seed
+
+    def fit(self, train: pd.DataFrame, y: object = None) -> WindowPreprocessor:
+        """Learn the kept sensors and their per-regime statistics from training rows."""
+        self.sensors_ = select_sensors(train)
+        self.normalizer_ = RegimeNormalizer(self.n_regimes, self.seed).fit(train)
+        self.cycle_mean_ = float(train["cycle"].mean())
+        self.cycle_std_ = float(train["cycle"].std(ddof=0)) or 1.0
+        self.feature_columns_ = [*self.sensors_, *(["cycle_z"] if self.include_cycle else [])]
+        return self
+
+    def transform(self, frame: pd.DataFrame) -> pd.DataFrame:
+        """Return ``frame`` with scaled sensors (and ``cycle_z`` if enabled) added."""
+        check_is_fitted(self, "feature_columns_")
+        scaled = self.normalizer_.transform(frame)
+        if self.include_cycle:
+            scaled["cycle_z"] = (scaled["cycle"] - self.cycle_mean_) / self.cycle_std_
+        return scaled

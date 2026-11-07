@@ -7,7 +7,7 @@ import torch
 
 from rul.data.labels import add_train_rul
 from rul.data.load import SENSOR_COLS, SETTING_COLS
-from rul.features.windows import WindowDataset, make_windows
+from rul.features.windows import WindowDataset, WindowPreprocessor, make_windows
 
 
 def engines(lengths: dict[int, int], seed: int = 0) -> pd.DataFrame:
@@ -109,3 +109,21 @@ def test_dataset_returns_window_and_target_tensors():
 def test_dataset_needs_labels():
     with pytest.raises(ValueError):
         WindowDataset(make_windows(tagged({1: 5}), FEATURES, target_column=None))
+
+
+def test_preprocessor_uses_training_engines_only():
+    train, test = engines({1: 60, 2: 50}), engines({9: 30}, seed=1)
+    test[["s_2", "s_3"]] += 1000  # test drift must not leak into the fitted scaling
+    prep = WindowPreprocessor().fit(train)
+    assert prep.feature_columns_ == ["s_2", "s_3"]
+    out = prep.transform(test)
+    mean, std = train["s_2"].mean(), train["s_2"].std(ddof=0)
+    np.testing.assert_allclose(out["s_2"], (test["s_2"] - mean) / std)
+
+
+def test_preprocessor_can_add_a_scaled_cycle_input():
+    train = engines({1: 60, 2: 50})
+    prep = WindowPreprocessor(include_cycle=True).fit(train)
+    out = prep.transform(train)
+    assert prep.feature_columns_[-1] == "cycle_z"
+    assert abs(out["cycle_z"].mean()) < 1e-9
