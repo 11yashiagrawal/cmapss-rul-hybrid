@@ -10,6 +10,7 @@ from rul.data.load import SENSOR_COLS, SETTING_COLS
 from rul.features.matrix import (
     FEATURE_GROUPS,
     HybridFeatures,
+    align_to_windows,
     build_feature_matrices,
     feature_group_columns,
     save_feature_matrices,
@@ -136,3 +137,21 @@ def test_rejects_unknown_or_empty_groups():
     with pytest.raises(ValueError):
         feature_group_columns(["cycle"], [], ())
     assert set(FEATURE_GROUPS) == {"age", "sensors", "mean", "slope", "health"}
+
+
+def test_align_to_windows_follows_the_window_order():
+    train = engines({1: 10, 2: 9})
+    features = HybridFeatures(windows=WINDOWS).fit(train).transform(train)
+    index = pd.DataFrame({"unit": [2, 1, 1], "cycle": [9, 3, 10]})
+    rows = align_to_windows(features, index)
+    keyed = features.set_index(["unit", "cycle"])
+    assert rows.shape == (3, features.shape[1] - 2) and rows.dtype == np.float32
+    np.testing.assert_allclose(rows[0], keyed.loc[(2, 9)].to_numpy(), rtol=1e-6)
+    np.testing.assert_allclose(rows[1], keyed.loc[(1, 3)].to_numpy(), rtol=1e-6)
+
+
+def test_align_to_windows_rejects_missing_window_ends():
+    train = engines({1: 5})
+    features = HybridFeatures(windows=WINDOWS).fit(train).transform(train)
+    with pytest.raises(ValueError, match="no features"):
+        align_to_windows(features, pd.DataFrame({"unit": [1], "cycle": [99]}))

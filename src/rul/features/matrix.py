@@ -180,3 +180,25 @@ class HybridFeatures(TransformerMixin, BaseEstimator):
         out.insert(0, "cycle", frame["cycle"].to_numpy())
         out.insert(0, "unit", frame["unit"].to_numpy())
         return out
+
+
+def align_to_windows(features: pd.DataFrame, window_index: pd.DataFrame) -> np.ndarray:
+    """Feature rows for each window's last cycle, in the order of ``window_index``.
+
+    Args:
+        features: Output of :meth:`HybridFeatures.transform`.
+        window_index: ``unit`` and ``cycle`` of each window's last cycle (the
+            ``index`` of the sequence windows from ``rul.features.windows``).
+
+    Returns:
+        ``[n_windows, n_features]`` float32 array.
+    """
+    columns = [c for c in features.columns if c not in ("unit", "cycle")]
+    keyed = features.set_index(["unit", "cycle"])
+    if not keyed.index.is_unique:
+        raise ValueError("features must have one row per (unit, cycle)")
+    keys = pd.MultiIndex.from_frame(window_index[["unit", "cycle"]])
+    missing = keys.difference(keyed.index)
+    if len(missing):
+        raise ValueError(f"no features for {len(missing)} window end(s), e.g. {missing[0]}")
+    return keyed.loc[keys, columns].to_numpy(dtype=np.float32)
