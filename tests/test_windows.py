@@ -70,6 +70,18 @@ def test_one_window_per_cycle_by_default_and_last_window_ends_at_last_cycle():
     assert last.to_dict() == {1: 40, 2: 4, 3: 31}
 
 
+def test_stride_counts_back_from_the_last_cycle():
+    w = make_windows(tagged({1: 10}), FEATURES, window=4, stride=3)
+    assert w.index["cycle"].tolist() == [1, 4, 7, 10]
+
+
+def test_without_padding_short_histories_are_skipped():
+    w = make_windows(tagged({1: 10, 2: 3}), FEATURES, window=4, pad=False)
+    assert w.index["unit"].unique().tolist() == [1]
+    assert w.index["cycle"].tolist() == list(range(4, 11))
+    np.testing.assert_array_equal(w.X[0, :, 1], [1, 2, 3, 4])
+
+
 def test_input_row_order_does_not_matter():
     frame = tagged({1: 12, 2: 9})
     shuffled = frame.sample(frac=1, random_state=3)
