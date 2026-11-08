@@ -21,7 +21,9 @@ from torch import nn
 
 from rul.models.base import RegressionHead, SequenceEncoder, SequenceRegressor
 
-MODELS: dict[str, str | type | Callable[..., nn.Module]] = {}
+MODELS: dict[str, str | type | Callable[..., nn.Module]] = {
+    "lstm": "rul.models.lstm:LSTMEncoder",
+}
 
 
 def register_model(name: str, target: str | type | Callable[..., nn.Module]) -> None:
