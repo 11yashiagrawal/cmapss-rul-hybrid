@@ -116,3 +116,48 @@ def test_hybrid_inputs_from_config_keep_feature_groups():
                        "model": {"type": "hybrid_gated", "encoder": {"type": "lstm"}}})
     inputs = parts.make_inputs().fit(engines())
     assert inputs.features_.output_columns_ == ["age", "s_2", "s_3"]
+
+
+HYBRID_CONFIG = {
+    "target": {"cap": 30}, "selection": {"max_true_rul": 25},
+    "cv": {"n_splits": 3, "split_seed": 42, "holdout_size": 0.25},
+    "inputs": {"type": "hybrid", "window": 5, "feature_windows": [2, 4]},
+    "training": {"epochs": 2, "batch_size": 64, "learning_rate": 0.01, "patience": 1, "seed": 0},
+    "model": {"type": "hybrid_gated", "encoder": {"type": "lstm", "hidden_size": 4, "num_layers": 1}},
+}
+
+
+def test_gate_values_come_back_for_every_row_in_frame_order():
+    from rul.training.runs import TrainedModel
+
+    frame = engines()
+    inputs = HybridInputs(window=5, feature_windows=(2,)).fit(frame)
+    torch.manual_seed(0)
+    net = GatedHybrid(LSTMEncoder(2, hidden_size=4), inputs.input_dims["n_engineered"])
+    trained = TrainedModel(net, inputs, target_scale=30.0)
+    gates = trained.outputs(frame, net.gate)
+    assert gates.shape == (len(frame), 4)
+    shuffled = frame.sample(frac=1, random_state=0)
+    np.testing.assert_allclose(trained.outputs(shuffled, net.gate),
+                               pd.DataFrame(gates, index=frame.index).loc[shuffled.index].to_numpy())
+    batch = inputs.transform(frame)
+    with torch.no_grad():
+        direct = net.eval().gate(*(torch.from_numpy(a) for a in batch.inputs)).numpy()
+    np.testing.assert_allclose(gates[batch.index["row"].to_numpy()], direct, rtol=1e-5)
+
+
+def test_cross_validation_hands_each_fold_model_to_on_fold():
+    from rul.training.runs import cross_validate
+
+    parts = run_parts(HYBRID_CONFIG)
+    seen = []
+    cv = cross_validate(
+        engines(n_units=9), parts.make_model, parts.make_inputs, parts.train_config,
+        **parts.cv_kwargs, on_fold=lambda k, trained, heldout: seen.append((k, trained, heldout)),
+    )
+    assert [k for k, _, _ in seen] == [1, 2, 3]
+    for (k, trained, heldout), fold in zip(seen, cv.folds):
+        assert sorted(heldout["unit"].unique()) == fold.heldout_units
+        assert "rul_true" in heldout
+        np.testing.assert_allclose(trained.predict(heldout),
+                                   cv.predictions.loc[cv.predictions["fold"] == k, "prediction"])
