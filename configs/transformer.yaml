@@ -1,0 +1,13 @@
+# Transformer encoder (#60), kept small because FD001 has only about 18,000 training windows.
+# Settings come from the grid in notebooks/phase2/08_transformer.ipynb (cross-validation only).
+# Run: python scripts/train_dl.py --config configs/transformer.yaml
+base: dl_base.yaml
+name: transformer
+
+model:
+  type: transformer
+  d_model: 32
+  n_heads: 4
+  num_layers: 2
+  dropout: 0.1
+  pooling: mean
