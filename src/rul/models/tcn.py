@@ -26,16 +26,33 @@ def receptive_field(kernel_size: int, levels: int) -> int:
     return 1 + 2 * (kernel_size - 1) * (2**levels - 1)
 
 
+def _pointwise(x: torch.Tensor, conv: nn.Conv1d) -> torch.Tensor:
+    """A kernel-1 convolution as a matrix product (``[batch, in, time] -> [batch, out, time]``)."""
+    return torch.einsum("bct,oc->bot", x, conv.weight[:, :, 0]) + conv.bias[:, None]
+
+
 class CausalConv1d(nn.Module):
-    """1-D convolution padded on the left only, so no output sees a later step."""
+    """1-D convolution padded on the left only, so no output sees a later step.
+
+    Without oneDNN (PyTorch 2.15 on Apple silicon, for example), PyTorch's CPU
+    convolution was 4-6 times slower at dilation 1 than at larger dilations in
+    our timing. That case is computed as an unfold plus a matrix product
+    instead, which gives the same result with the same weights.
+    """
 
     def __init__(self, in_channels: int, out_channels: int, kernel_size: int, dilation: int) -> None:
         super().__init__()
+        self.kernel_size = kernel_size
+        self.dilation = dilation
         self.left_pad = (kernel_size - 1) * dilation
         self.conv = nn.Conv1d(in_channels, out_channels, kernel_size, dilation=dilation)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.conv(F.pad(x, (self.left_pad, 0)))
+        x = F.pad(x, (self.left_pad, 0))
+        if self.dilation == 1:
+            patches = x.unfold(2, self.kernel_size, 1)  # [batch, in, time, kernel]
+            return torch.einsum("bctk,ock->bot", patches, self.conv.weight) + self.conv.bias[:, None]
+        return self.conv(x)
 
 
 class TemporalBlock(nn.Module):
@@ -57,8 +74,12 @@ class TemporalBlock(nn.Module):
             nn.Conv1d(in_channels, out_channels, 1) if in_channels != out_channels else nn.Identity()
         )
 
+    def project_residual(self, x: torch.Tensor) -> torch.Tensor:
+        """Residual path: identity, or a 1x1 convolution when the channels change."""
+        return x if isinstance(self.residual, nn.Identity) else _pointwise(x, self.residual)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return F.relu(self.net(x) + self.residual(x))
+        return F.relu(self.net(x) + self.project_residual(x))
 
 
 class TCNEncoder(SequenceEncoder):

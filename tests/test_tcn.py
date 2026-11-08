@@ -74,3 +74,26 @@ def test_rejects_bad_settings():
     for bad in ({"kernel_size": 1}, {"levels": 0}, {"dropout": 1.0}, {"channels": 0}):
         with pytest.raises(ValueError):
             TCNEncoder(FEATURES, **bad)
+
+
+@pytest.mark.parametrize("dilation", [1, 2, 4])
+def test_causal_conv_matches_a_left_padded_convolution(dilation):
+    from torch.nn.functional import conv1d, pad
+
+    from rul.models.tcn import CausalConv1d
+
+    layer = CausalConv1d(5, 7, kernel_size=3, dilation=dilation)
+    x = torch.randn(2, 5, 30)
+    expected = conv1d(pad(x, (2 * dilation, 0)), layer.conv.weight, layer.conv.bias, dilation=dilation)
+    torch.testing.assert_close(layer(x), expected)
+
+
+def test_pointwise_residual_matches_a_1x1_convolution():
+    from torch.nn.functional import conv1d
+
+    from rul.models.tcn import TemporalBlock
+
+    block = TemporalBlock(5, 7, kernel_size=3, dilation=1, dropout=0.0)
+    x = torch.randn(2, 5, 30)
+    expected = conv1d(x, block.residual.weight, block.residual.bias)
+    torch.testing.assert_close(block.project_residual(x), expected)
