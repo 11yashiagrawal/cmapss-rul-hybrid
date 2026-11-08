@@ -18,14 +18,17 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import torch
 from torch import nn
 
 from rul.data.labels import add_train_rul
 from rul.data.split import group_kfold_splits, holdout_split
 from rul.evaluation.metrics import evaluate, rmse
+from rul.evaluation.official import METRICS_DIR, save_results
 from rul.training.inputs import WindowInputs
 from rul.training.trainer import FitResult, TrainConfig, fit, predict, set_seed
 
@@ -46,6 +49,7 @@ class TrainedModel:
     target_scale: float
     train_units: list[int] = field(default_factory=list)
     device: str = "cpu"
+    meta: dict = field(default_factory=dict)
 
     def predict(self, frame: pd.DataFrame) -> np.ndarray:
         """Predict RUL at every row of ``frame`` (each row's own and earlier cycles)."""
@@ -54,6 +58,37 @@ class TrainedModel:
         batch = self.inputs.transform(frame, target=None, stride=1)
         out = predict(self.model, batch.inputs, target_scale=self.target_scale, device=self.device)
         return pd.Series(out, index=batch.index["row"].to_numpy()).loc[frame.index].to_numpy()
+
+    def save(self, path: str | Path, meta: dict | None = None) -> Path:
+        """Save the network, its fitted inputs and ``meta`` (e.g. the run config).
+
+        Checkpoints belong under ``results/models/``, which git ignores.
+        """
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if meta is not None:
+            self.meta = meta
+        self.model.to("cpu")
+        torch.save(
+            {
+                "model": self.model,
+                "inputs": self.inputs,
+                "target_scale": self.target_scale,
+                "train_units": self.train_units,
+                "meta": self.meta,
+            },
+            path,
+        )
+        return path
+
+    @classmethod
+    def load(cls, path: str | Path, device: str = "cpu") -> TrainedModel:
+        """Load a checkpoint written by :meth:`save` (only load files you trust)."""
+        state = torch.load(path, map_location=device, weights_only=False)
+        return cls(
+            state["model"], state["inputs"], state["target_scale"],
+            state["train_units"], device, state["meta"],
+        )
 
 
 @dataclass
@@ -107,6 +142,19 @@ class CVResult:
             "seconds": float(sum(f.seconds for f in self.folds)),
             "folds": [f.to_dict() for f in self.folds],
         }
+
+
+def save_cv(
+    name: str, cv: CVResult, meta: dict | None = None, out_dir: str | Path = METRICS_DIR
+) -> dict[str, Path]:
+    """Write ``<name>.json`` (scores, folds, ``meta``) and ``<name>_predictions.csv``.
+
+    The CSV keeps every held-out cycle, so the selection metric can be
+    recomputed later (for example with the threshold from #55) without
+    retraining.
+    """
+    record = {"meta": meta or {}, **cv.to_dict()}
+    return save_results(name, record, cv.predictions, out_dir=out_dir)
 
 
 def score_heldout(y_true, y_pred, max_true_rul: float | None) -> dict:

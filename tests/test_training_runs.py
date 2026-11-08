@@ -1,5 +1,7 @@
 """Tests for cross-validation, the final refit and the frame-level predictor."""
 
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -12,7 +14,7 @@ from rul.data.split import group_kfold_splits
 from rul.evaluation.official import predict_test_cycles, score_last_cycle
 from rul.models.base import SequenceEncoder, SequenceRegressor
 from rul.training.inputs import WindowInputs
-from rul.training.runs import cross_validate, refit, score_heldout
+from rul.training.runs import TrainedModel, cross_validate, refit, save_cv, score_heldout
 from rul.training.trainer import TrainConfig
 
 
@@ -163,3 +165,25 @@ def test_trained_model_rejects_duplicate_row_labels(train):
     trained, _ = refit(train, make_model, make_inputs, CONFIG, cap=CAP, epochs=1)
     with pytest.raises(ValueError, match="unique index"):
         trained.predict(pd.concat([train.head(5), train.head(5)]))
+
+
+def test_trained_model_round_trips_through_a_checkpoint(train, tmp_path):
+    trained, _ = refit(train, make_model, make_inputs, CONFIG, cap=CAP, epochs=2)
+    path = trained.save(tmp_path / "models" / "run.pt", meta={"name": "run"})
+    loaded = TrainedModel.load(path)
+    np.testing.assert_array_equal(loaded.predict(train), trained.predict(train))
+    assert loaded.target_scale == trained.target_scale
+    assert loaded.meta == {"name": "run"}
+
+
+def test_save_cv_writes_metrics_json_and_cycle_predictions(train, cv, tmp_path):
+    paths = save_cv("fd001_cv_stand_in", cv, meta={"model": {"type": "mean"}}, out_dir=tmp_path)
+    record = json.loads(paths["metrics"].read_text())
+    assert record["meta"] == {"model": {"type": "mean"}}
+    assert record["median_best_epoch"] == cv.median_best_epoch
+    assert record["summary"]["selection_rmse"]["mean"] == pytest.approx(
+        cv.summary()["selection_rmse"]["mean"]
+    )
+    saved = pd.read_csv(paths["predictions"])
+    assert list(saved.columns) == ["unit", "cycle", "rul", "fold", "prediction"]
+    assert len(saved) == len(train)
