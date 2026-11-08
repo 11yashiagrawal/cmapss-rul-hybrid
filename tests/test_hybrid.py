@@ -102,6 +102,7 @@ def test_hybrid_inputs_line_features_up_with_window_ends():
     batch = inputs.transform(frame, target="rul")
     windows, features = batch.inputs
     assert windows.shape == (len(frame), 5, 2)
+    assert features.dtype == np.float32 and features.flags.writeable  # torch warns on read-only arrays
     assert features.shape == (len(frame), inputs.input_dims["n_engineered"])
     assert inputs.input_dims == {"n_features": 2, "n_engineered": 1 + 2 + 2 * 2 * 3}
     expected = inputs.features_.transform(frame).set_index(["unit", "cycle"])

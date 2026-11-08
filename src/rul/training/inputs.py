@@ -120,5 +120,6 @@ class HybridInputs(WindowInputs):
         self, frame: pd.DataFrame, *, target: str | None = None, stride: int | None = None
     ) -> InputBatch:
         batch = super().transform(frame, target=target, stride=stride)
-        features = align_to_windows(self.features_.transform(frame), batch.index)
+        # pandas copy-on-write hands back a read-only array; torch wants a writable one
+        features = np.array(align_to_windows(self.features_.transform(frame), batch.index))
         return InputBatch((*batch.inputs, features), batch.y, batch.index)
