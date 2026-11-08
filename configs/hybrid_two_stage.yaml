@@ -1,0 +1,27 @@
+# Hybrid B, two-stage (#65): XGBoost on the engineered features from #57 plus
+# embeddings from the tuned LSTM (#58). Each training engine's embedding comes
+# from an LSTM trained on the other inner groups; predictions use an LSTM refit
+# on every training engine. XGBoost settings are checked in
+# notebooks/phase2/09_hybrid.ipynb (#68).
+# Cross-validation only; the official test runs in #71.
+# Run: python scripts/train_dl.py --config configs/hybrid_two_stage.yaml
+base: dl_base.yaml
+name: hybrid_two_stage
+
+model:
+  type: hybrid_two_stage
+  use: both               # or features, embeddings (ablations)
+  inner_folds: 3          # engine groups for cross-fitting
+  feature_windows: [5, 10, 20]
+  encoder:                # the LSTM chosen in notebooks/phase2/06_lstm.ipynb
+    type: lstm
+    hidden_size: 64
+    num_layers: 1
+    dropout: 0.3
+  xgboost:
+    n_estimators: 400
+    max_depth: 4
+    learning_rate: 0.05
+    subsample: 0.8
+    colsample_bytree: 0.8
+    min_child_weight: 5

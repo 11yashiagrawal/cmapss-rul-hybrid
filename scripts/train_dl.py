@@ -23,8 +23,14 @@ from pathlib import Path
 
 from rul.data.load import load_subset
 from rul.evaluation.official import METRICS_DIR
-from rul.training.config import apply_overrides, load_config, run_parts
-from rul.training.runs import cross_validate, refit, save_cv
+from rul.training.config import (
+    apply_overrides,
+    load_config,
+    run_cv,
+    run_parts,
+    run_refit,
+)
+from rul.training.runs import save_cv
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -57,9 +63,7 @@ def main(argv: list[str] | None = None) -> None:
     seed = parts.train_config.seed
 
     train = load_subset(subset, data_dir=args.data_dir).train
-    cv = cross_validate(
-        train, parts.make_model, parts.make_inputs, parts.train_config, **parts.cv_kwargs
-    )
+    cv = run_cv(config, train)
     meta = {"name": name, "subset": subset, "seed": seed, "config": config}
     paths = save_cv(f"{subset.lower()}_cv_{name}", cv, meta=meta, out_dir=args.metrics_dir)
 
@@ -72,14 +76,11 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.refit:
         epochs = cv.median_best_epoch
-        trained, result = refit(
-            train, parts.make_model, parts.make_inputs, parts.train_config,
-            cap=parts.cv_kwargs.get("cap"), epochs=epochs,
-        )
+        model, seconds = run_refit(config, train, epochs)
         base_name = args.name or config["name"]
         path = Path(args.models_dir) / f"{subset.lower()}_{base_name}_seed{seed}.pt"
-        trained.save(path, meta={**meta, "epochs": epochs, "seconds": result.seconds})
-        print(f"refit for {epochs} epochs in {result.seconds:.0f} s, saved {path}")
+        model.save(path, meta={**meta, "epochs": epochs, "seconds": seconds})
+        print(f"refit in {seconds:.0f} s (networks: {epochs} epochs), saved {path}")
 
 
 if __name__ == "__main__":
