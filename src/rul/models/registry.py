@@ -35,6 +35,7 @@ def register_model(name: str, target: str | type | Callable[..., nn.Module]) -> 
 
 
 def _resolve(target):
+    """Import ``"module:Name"`` targets; return anything else unchanged."""
     if isinstance(target, str):
         module, _, attr = target.partition(":")
         return getattr(importlib.import_module(module), attr)
