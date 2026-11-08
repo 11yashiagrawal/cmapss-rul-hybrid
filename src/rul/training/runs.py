@@ -59,22 +59,31 @@ class TrainedModel:
         out = predict(self.model, batch.inputs, target_scale=self.target_scale, device=self.device)
         return pd.Series(out, index=batch.index["row"].to_numpy()).loc[frame.index].to_numpy()
 
+    def outputs(self, frame: pd.DataFrame, fn: Callable[..., torch.Tensor]) -> np.ndarray:
+        """``fn(*inputs)`` for every row of ``frame``, in its row order.
+
+        ``fn`` takes the same input tensors as the model, for example
+        ``model.encoder`` (embeddings) or a hybrid's ``gate``. It runs in
+        evaluation mode without gradients.
+        """
+        if not frame.index.is_unique:
+            raise ValueError("frame needs a unique index to return outputs in row order")
+        batch = self.inputs.transform(frame, target=None, stride=1)
+        self.model.to(self.device).eval()
+        with torch.no_grad():
+            out = torch.cat([
+                fn(*(torch.as_tensor(a[i : i + 1024]).to(self.device) for a in batch.inputs)).cpu()
+                for i in range(0, len(batch.index), 1024)
+            ]).numpy()
+        rows = pd.Series(np.arange(len(out)), index=batch.index["row"].to_numpy())
+        return out[rows.loc[frame.index].to_numpy()]
+
     def embed(self, frame: pd.DataFrame) -> np.ndarray:
         """Encoder embeddings ``[rows, output_dim]`` for every row of ``frame``, in its row order.
 
         Needs a model with an ``encoder`` (a :class:`~rul.models.base.SequenceRegressor`).
         """
-        if not frame.index.is_unique:
-            raise ValueError("frame needs a unique index to return embeddings in row order")
-        batch = self.inputs.transform(frame, target=None, stride=1)
-        encoder = self.model.encoder.to(self.device).eval()
-        with torch.no_grad():
-            out = torch.cat([
-                encoder(*(torch.as_tensor(a[i : i + 1024]).to(self.device) for a in batch.inputs)).cpu()
-                for i in range(0, len(batch.index), 1024)
-            ]).numpy()
-        rows = pd.Series(np.arange(len(out)), index=batch.index["row"].to_numpy())
-        return out[rows.loc[frame.index].to_numpy()]
+        return self.outputs(frame, self.model.encoder)
 
     def save(self, path: str | Path, meta: dict | None = None) -> Path:
         """Save the network, its fitted inputs and ``meta`` (e.g. the run config).
@@ -245,6 +254,7 @@ def cross_validate(
     split_seed: int = 42,
     holdout_size: float = 0.2,
     selection_max_rul: float | None = None,
+    on_fold: Callable[[int, TrainedModel, pd.DataFrame], None] | None = None,
 ) -> CVResult:
     """Score a model on the Phase 1 engine folds.
 
@@ -257,6 +267,10 @@ def cross_validate(
         n_splits, split_seed: Phase 1 folds (3 and 42).
         holdout_size: Share of each fold's training engines used for early stopping.
         selection_max_rul: Threshold for the selection RMSE (from #55).
+        on_fold: Called as ``on_fold(fold, trained, heldout)`` after each fold,
+            with the fold's model and its held-out cycles (``rul`` is the
+            training label, ``rul_true`` the uncapped RUL). Use it to inspect
+            the fold models, e.g. a hybrid's gate on unseen engines.
     """
     labelled = add_train_rul(train, cap=cap).assign(rul_true=add_train_rul(train)["rul"])
     folds, predictions = [], []
@@ -269,6 +283,8 @@ def cross_validate(
             cap=cap, holdout_size=holdout_size, split_seed=split_seed,
         )
         pred = trained.predict(fold_val)
+        if on_fold is not None:
+            on_fold(k, trained, fold_val)
         folds.append(
             FoldResult(
                 fold=k,
