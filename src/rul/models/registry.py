@@ -24,6 +24,7 @@ from rul.models.base import RegressionHead, SequenceEncoder, SequenceRegressor
 MODELS: dict[str, str | type | Callable[..., nn.Module]] = {
     "lstm": "rul.models.lstm:LSTMEncoder",
     "tcn": "rul.models.tcn:TCNEncoder",
+    "transformer": "rul.models.transformer:TransformerEncoder",
 }
 
 
