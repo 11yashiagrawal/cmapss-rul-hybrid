@@ -59,6 +59,23 @@ class TrainedModel:
         out = predict(self.model, batch.inputs, target_scale=self.target_scale, device=self.device)
         return pd.Series(out, index=batch.index["row"].to_numpy()).loc[frame.index].to_numpy()
 
+    def embed(self, frame: pd.DataFrame) -> np.ndarray:
+        """Encoder embeddings ``[rows, output_dim]`` for every row of ``frame``, in its row order.
+
+        Needs a model with an ``encoder`` (a :class:`~rul.models.base.SequenceRegressor`).
+        """
+        if not frame.index.is_unique:
+            raise ValueError("frame needs a unique index to return embeddings in row order")
+        batch = self.inputs.transform(frame, target=None, stride=1)
+        encoder = self.model.encoder.to(self.device).eval()
+        with torch.no_grad():
+            out = torch.cat([
+                encoder(*(torch.as_tensor(a[i : i + 1024]).to(self.device) for a in batch.inputs)).cpu()
+                for i in range(0, len(batch.index), 1024)
+            ]).numpy()
+        rows = pd.Series(np.arange(len(out)), index=batch.index["row"].to_numpy())
+        return out[rows.loc[frame.index].to_numpy()]
+
     def save(self, path: str | Path, meta: dict | None = None) -> Path:
         """Save the network, its fitted inputs and ``meta`` (e.g. the run config).
 
@@ -177,7 +194,7 @@ def _units(frame: pd.DataFrame) -> list[int]:
     return sorted(int(u) for u in frame["unit"].unique())
 
 
-def _train(
+def train_on_engines(
     frame: pd.DataFrame,
     make_model: ModelFactory,
     make_inputs: InputsFactory,
@@ -188,7 +205,11 @@ def _train(
     split_seed: int,
     epochs: int | None = None,
 ) -> tuple[TrainedModel, FitResult, list[int]]:
-    """Fit inputs and a fresh model on ``frame`` (labelled with ``rul``)."""
+    """Fit inputs and a fresh model on ``frame`` (labelled with ``rul``).
+
+    With ``holdout_size``, an engine-level holdout is split off for early
+    stopping. Returns the trained model, its fit history and the holdout units.
+    """
     if holdout_size:
         fit_idx, hold_idx = holdout_split(frame, holdout_size, split_seed)
         fit_part, hold_part = frame.iloc[fit_idx], frame.iloc[hold_idx]
@@ -243,7 +264,7 @@ def cross_validate(
         group_kfold_splits(labelled, n_splits=n_splits, seed=split_seed), start=1
     ):
         fold_train, fold_val = labelled.iloc[train_idx], labelled.iloc[val_idx]
-        trained, result, holdout_units = _train(
+        trained, result, holdout_units = train_on_engines(
             fold_train, make_model, make_inputs, config,
             cap=cap, holdout_size=holdout_size, split_seed=split_seed,
         )
@@ -274,6 +295,57 @@ def cross_validate(
     return CVResult(folds, pd.concat(predictions, ignore_index=True))
 
 
+def cross_validate_estimator(
+    train: pd.DataFrame,
+    make_estimator: Callable[[], object],
+    *,
+    cap: float | None = 125,
+    n_splits: int = 3,
+    split_seed: int = 42,
+    selection_max_rul: float | None = None,
+) -> CVResult:
+    """Like :func:`cross_validate`, for models that fit on frames themselves.
+
+    ``make_estimator()`` returns an object with ``fit(labelled_frame)`` and
+    ``predict(frame)``; after fitting it exposes ``train_units_`` (every
+    engine it learned from), ``best_epoch_`` and ``fit_seconds_``. The
+    two-stage hybrid (#65) runs through here, so it is scored exactly like
+    the networks.
+    """
+    labelled = add_train_rul(train, cap=cap).assign(rul_true=add_train_rul(train)["rul"])
+    folds, predictions = [], []
+    for k, (train_idx, val_idx) in enumerate(
+        group_kfold_splits(labelled, n_splits=n_splits, seed=split_seed), start=1
+    ):
+        fold_train, fold_val = labelled.iloc[train_idx], labelled.iloc[val_idx]
+        estimator = make_estimator().fit(fold_train.drop(columns="rul_true"))
+        pred = estimator.predict(fold_val)
+        folds.append(
+            FoldResult(
+                fold=k,
+                best_epoch=int(estimator.best_epoch_),
+                seconds=float(estimator.fit_seconds_),
+                train_units=list(estimator.train_units_),
+                holdout_units=[],
+                heldout_units=_units(fold_val),
+                scores=score_heldout(fold_val["rul_true"], pred, selection_max_rul),
+                history=[],
+            )
+        )
+        predictions.append(
+            pd.DataFrame(
+                {
+                    "unit": fold_val["unit"].to_numpy(),
+                    "cycle": fold_val["cycle"].to_numpy(),
+                    "rul": fold_val["rul_true"].to_numpy(),
+                    "fold": k,
+                    "prediction": pred,
+                }
+            )
+        )
+    return CVResult(folds, pd.concat(predictions, ignore_index=True))
+
+
 def refit(
     train: pd.DataFrame,
     make_model: ModelFactory,
@@ -285,7 +357,7 @@ def refit(
 ) -> tuple[TrainedModel, FitResult]:
     """Train on every training engine for a fixed number of epochs (no holdout)."""
     labelled = add_train_rul(train, cap=cap)
-    trained, result, _ = _train(
+    trained, result, _ = train_on_engines(
         labelled, make_model, make_inputs, config,
         cap=cap, holdout_size=None, split_seed=0, epochs=epochs,
     )
