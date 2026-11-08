@@ -17,9 +17,8 @@ import pandas as pd
 import yaml
 
 from rul.data.labels import add_train_rul
-from rul.models.registry import build_model
+from rul.models.registry import _resolve, build_model
 from rul.training.inputs import HybridInputs, WindowInputs
-from rul.models.registry import _resolve
 from rul.training.runs import CVResult, cross_validate, cross_validate_estimator, refit
 from rul.training.trainer import TrainConfig
 
