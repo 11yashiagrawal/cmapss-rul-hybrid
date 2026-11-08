@@ -1,5 +1,7 @@
 # LSTM (#58): the reference sequence model.
-# Settings come from the grid in notebooks/phase2/06_lstm.ipynb (cross-validation only).
+# Settings come from the grid in notebooks/phase2/06_lstm.ipynb (cross-validation only):
+# one layer of 64 units had the lowest selection RMSE, 15.78 ± 0.44 over the 3 folds.
+# With one layer, dropout applies to the final hidden state only.
 # Run: python scripts/train_dl.py --config configs/lstm.yaml
 base: dl_base.yaml
 name: lstm
@@ -7,5 +9,5 @@ name: lstm
 model:
   type: lstm
   hidden_size: 64
-  num_layers: 2
-  dropout: 0.1
+  num_layers: 1
+  dropout: 0.3
