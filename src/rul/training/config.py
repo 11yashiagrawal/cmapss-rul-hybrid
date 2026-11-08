@@ -17,11 +17,11 @@ import pandas as pd
 import yaml
 
 from rul.models.registry import build_model
-from rul.training.inputs import WindowInputs
+from rul.training.inputs import HybridInputs, WindowInputs
 from rul.training.runs import CVResult, cross_validate
 from rul.training.trainer import TrainConfig
 
-INPUTS: dict[str, Callable[..., WindowInputs]] = {"windows": WindowInputs}
+INPUTS: dict[str, Callable[..., WindowInputs]] = {"windows": WindowInputs, "hybrid": HybridInputs}
 
 
 def _merge(base: dict, override: dict) -> dict:

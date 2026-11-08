@@ -25,6 +25,7 @@ MODELS: dict[str, str | type | Callable[..., nn.Module]] = {
     "lstm": "rul.models.lstm:LSTMEncoder",
     "tcn": "rul.models.tcn:TCNEncoder",
     "transformer": "rul.models.transformer:TransformerEncoder",
+    "hybrid_gated": "rul.models.hybrid:build_gated_hybrid",
 }
 
 
@@ -38,6 +39,17 @@ def _resolve(target):
         module, _, attr = target.partition(":")
         return getattr(importlib.import_module(module), attr)
     return target
+
+
+def build_encoder(spec: dict, n_features: int) -> SequenceEncoder:
+    """Build only the encoder named by ``spec["type"]`` (used inside the hybrids)."""
+    params = dict(spec)
+    name = params.pop("type")
+    params.pop("head", None)
+    target = _resolve(MODELS[name]) if name in MODELS else None
+    if not (isinstance(target, type) and issubclass(target, SequenceEncoder)):
+        raise KeyError(f"{name!r} is not a sequence encoder")
+    return target(n_features=n_features, **params)
 
 
 def build_model(spec: dict, input_dims: dict[str, int]) -> nn.Module:
