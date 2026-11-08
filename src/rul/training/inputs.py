@@ -14,6 +14,7 @@ from typing import NamedTuple
 import numpy as np
 import pandas as pd
 
+from rul.features.matrix import FEATURE_GROUPS, HybridFeatures, align_to_windows
 from rul.features.windows import WindowPreprocessor, make_windows
 
 
@@ -75,3 +76,49 @@ class WindowInputs:
             target_column=target,
         )
         return InputBatch((windows.X,), windows.y, windows.index)
+
+
+class HybridInputs(WindowInputs):
+    """Sensor windows plus the engineered features at each window's last cycle.
+
+    Both are fitted on the same training engines. The second input is the
+    Phase 1 feature set from :class:`rul.features.matrix.HybridFeatures`
+    (#57), lined up with the windows by ``(unit, cycle)``.
+
+    Args:
+        groups: Feature groups to keep (ablations in #69).
+        feature_windows: Rolling windows for the engineered features.
+        Other arguments as for :class:`WindowInputs`.
+    """
+
+    def __init__(
+        self,
+        window: int = 30,
+        stride: int = 1,
+        n_regimes: int = 1,
+        include_cycle: bool = False,
+        seed: int = 42,
+        groups: tuple[str, ...] = FEATURE_GROUPS,
+        feature_windows: tuple[int, ...] = (5, 10, 20),
+    ) -> None:
+        super().__init__(window, stride, n_regimes, include_cycle, seed)
+        self.groups = tuple(groups)
+        self.feature_windows = tuple(feature_windows)
+
+    def fit(self, train: pd.DataFrame) -> HybridInputs:
+        super().fit(train)
+        self.features_ = HybridFeatures(
+            n_regimes=self.n_regimes, windows=self.feature_windows, groups=self.groups, seed=self.seed
+        ).fit(train)
+        return self
+
+    @property
+    def input_dims(self) -> dict[str, int]:
+        return {**super().input_dims, "n_engineered": len(self.features_.output_columns_)}
+
+    def transform(
+        self, frame: pd.DataFrame, *, target: str | None = None, stride: int | None = None
+    ) -> InputBatch:
+        batch = super().transform(frame, target=target, stride=stride)
+        features = align_to_windows(self.features_.transform(frame), batch.index)
+        return InputBatch((*batch.inputs, features), batch.y, batch.index)
