@@ -1,0 +1,35 @@
+# Shared settings for every Phase 2 sequence model.
+# A model config starts with `base: dl_base.yaml` and adds `name` and `model`.
+# Run one with: python scripts/train_dl.py --config configs/<model>.yaml
+
+subset: FD001
+
+target:
+  cap: 125            # RUL cap chosen from training engines in #55; null trains uncapped
+
+selection:
+  max_true_rul: 130   # selection RMSE uses held-out cycles with true RUL <= this; set from #55
+
+cv:                   # the Phase 1 folds
+  n_splits: 3
+  split_seed: 42
+  holdout_size: 0.2   # engines held out of each fold's training part, for early stopping
+
+inputs:
+  type: windows
+  window: 30
+  stride: 1
+  n_regimes: 1        # FD001 has one operating regime
+  include_cycle: false
+
+training:
+  epochs: 100
+  batch_size: 256
+  learning_rate: 0.001
+  weight_decay: 0.0
+  grad_clip: 1.0
+  scheduler: cosine
+  patience: 10
+  loss: mse
+  device: cpu         # reported runs use CPU
+  seed: 42
