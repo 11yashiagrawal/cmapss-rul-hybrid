@@ -14,7 +14,13 @@ from rul.data.split import group_kfold_splits
 from rul.evaluation.official import predict_test_cycles, score_last_cycle
 from rul.models.base import SequenceEncoder, SequenceRegressor
 from rul.training.inputs import WindowInputs
-from rul.training.runs import TrainedModel, cross_validate, refit, save_cv, score_heldout
+from rul.training.runs import (
+    TrainedModel,
+    cross_validate,
+    refit,
+    save_cv,
+    score_heldout,
+)
 from rul.training.trainer import TrainConfig
 
 
