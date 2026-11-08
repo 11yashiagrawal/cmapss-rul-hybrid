@@ -1,5 +1,6 @@
 # Temporal CNN (#59): dilated causal convolutions in residual blocks.
 # Settings come from the grid in notebooks/phase2/07_tcn.ipynb (cross-validation only).
+# The smallest setting within one fold standard deviation of the best: selection RMSE 17.24 ± 1.19.
 # Run: python scripts/train_dl.py --config configs/tcn.yaml
 base: dl_base.yaml
 name: tcn
