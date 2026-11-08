@@ -1,6 +1,7 @@
 # Hybrid A, gated fusion (#64): the tuned LSTM from #58 and a small MLP over the
 # engineered features from #57, mixed per dimension by a learned gate.
-# The feature-branch width is checked in notebooks/phase2/09_hybrid.ipynb (#68).
+# The feature-branch width was chosen in notebooks/phase2/09_hybrid.ipynb (#68): 32, 64 or 128,
+# the smallest within one fold standard deviation of the best.
 # Cross-validation only; the official test runs in #71.
 # Run: python scripts/train_dl.py --config configs/hybrid_gated.yaml
 base: dl_base.yaml
@@ -13,7 +14,7 @@ inputs:
 model:
   type: hybrid_gated
   fusion: gated           # or concat, sequence, features (ablations)
-  feature_hidden: 64
+  feature_hidden: 32
   dropout: 0.1            # in the feature branch
   encoder:                # the LSTM chosen in notebooks/phase2/06_lstm.ipynb
     type: lstm
