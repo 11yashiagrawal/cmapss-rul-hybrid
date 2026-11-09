@@ -1,0 +1,31 @@
+% Standalone section preview for #74; the complete Phase 2 report is separate.
+% Build from reports/phase2/: tectonic --keep-logs dl_dataset_preview.tex
+% IEEEtran selects Times while loading; provide its legacy encoding first.
+\RequirePackage[T1]{fontenc}
+\documentclass[conference]{IEEEtran}
+\usepackage{iftex}
+\ifXeTeX
+  \usepackage{fontspec}
+  \defaultfontfeatures{Extension=.otf, UprightFont=*-regular, BoldFont=*-bold,
+    ItalicFont=*-italic, BoldItalicFont=*-bolditalic}
+  \setmainfont{texgyretermes}
+  \setsansfont{texgyreheros}
+  \setmonofont{texgyrecursor}
+\fi
+\usepackage{cite}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{url}
+
+\begin{document}
+\title{Sequence Dataset and Regularization\\Phase 2 Section Preview}
+\author{\IEEEauthorblockN{Issue \#74: Report Section}
+\IEEEauthorblockA{C-MAPSS Remaining Useful Life Study}}
+\maketitle
+\raggedbottom
+\input{sections/dl_dataset}
+% Keep this short preview's reference heading and entries in the next column.
+\newpage
+\bibliographystyle{IEEEtran}
+\bibliography{sections/dl_dataset}
+\end{document}
