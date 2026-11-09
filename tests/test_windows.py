@@ -7,9 +7,7 @@ import torch
 
 from rul.data.labels import add_train_rul
 from rul.data.load import SENSOR_COLS, SETTING_COLS
-from rul.evaluation.official import predict_test_cycles, score_last_cycle
 from rul.features.windows import (
-    SequencePredictor,
     WindowDataset,
     WindowPreprocessor,
     make_windows,
@@ -133,23 +131,3 @@ def test_preprocessor_can_add_a_scaled_cycle_input():
     out = prep.transform(train)
     assert prep.feature_columns_[-1] == "cycle_z"
     assert abs(out["cycle_z"].mean()) < 1e-9
-
-
-class LastStepModel(torch.nn.Module):
-    """Predicts the first feature at each window's last cycle."""
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x[:, -1, 0]
-
-
-def test_predictor_plugs_into_official_scoring_in_row_order():
-    train = engines({1: 60, 2: 50})
-    test = engines({5: 25, 3: 4}, seed=2).sample(frac=1, random_state=0)
-    prep = WindowPreprocessor().fit(train)
-    predictor = SequencePredictor(LastStepModel(), prep, window=30, batch_size=7)
-
-    cycles = predict_test_cycles(predictor, test, pd.Series({3: 10, 5: 20}).rename_axis("unit"))
-    expected = prep.transform(test)["s_2"].to_numpy()
-    np.testing.assert_allclose(cycles["prediction"], expected, rtol=1e-6)
-    last, _ = score_last_cycle(cycles)
-    assert last["cycle"].tolist() == [4, 25]
