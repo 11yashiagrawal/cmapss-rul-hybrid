@@ -1,0 +1,18 @@
+{
+  "FD002 LSTM": {
+    "scaling": "per-regime",
+    "n_regimes": 6
+  },
+  "FD002 Hybrid A": {
+    "scaling": "global",
+    "n_regimes": 1
+  },
+  "FD004 LSTM": {
+    "scaling": "per-regime",
+    "n_regimes": 6
+  },
+  "FD004 Hybrid A": {
+    "scaling": "per-regime",
+    "n_regimes": 6
+  }
+}
