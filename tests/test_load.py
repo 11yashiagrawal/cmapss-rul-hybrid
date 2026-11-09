@@ -77,6 +77,24 @@ def test_rul_file_must_have_one_value_per_test_engine(tmp_path):
         load_subset("FD001", data_dir=tmp_path)
 
 
+def test_load_training_does_not_require_or_read_official_test_files(tmp_path):
+    from rul.data.load import load_training
+
+    write_subset(tmp_path, train_cycles={1: 3}, test_cycles={1: 2}, rul=[112])
+    (tmp_path / "test_FD001.txt").unlink()
+    (tmp_path / "RUL_FD001.txt").unlink()
+    train = load_training("FD001", data_dir=tmp_path)
+    assert list(train.columns) == EXPECTED_COLUMNS
+    assert train["cycle"].tolist() == [1, 2, 3]
+
+
+def test_load_training_rejects_unknown_subset(tmp_path):
+    from rul.data.load import load_training
+
+    with pytest.raises(ValueError, match="FD001"):
+        load_training("fd001", data_dir=tmp_path)
+
+
 # Counted from the raw files with `wc -l` and `awk '{print $1}' | sort -u`.
 # Note: the dataset readme swaps the FD004 engine counts; the files have
 # 249 training and 248 test engines.

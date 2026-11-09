@@ -232,7 +232,9 @@ def train_on_engines(
         held = inputs.transform(hold_part, target="rul", stride=1)
         validation = (held.inputs, held.y)
 
-    scale = float(cap) if cap else float(batch.y.max())
+    # Stride may omit the earliest cycles; keep target scaling independent of
+    # window sampling, using only the engines actually used for fitting.
+    scale = float(cap) if cap else float(fit_part["rul"].max())
     set_seed(config.seed)
     model = make_model(inputs.input_dims)
     result = fit(

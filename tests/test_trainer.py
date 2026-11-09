@@ -1,5 +1,7 @@
 """Tests for the shared training loop."""
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 import torch
@@ -138,3 +140,52 @@ def test_rejects_mismatched_lengths_and_unknown_options():
 def test_config_from_dict_keeps_values():
     config = TrainConfig.from_dict({"epochs": 3, "learning_rate": 0.01, "grad_clip": None})
     assert (config.epochs, config.learning_rate, config.grad_clip) == (3, 0.01, None)
+
+
+@pytest.mark.parametrize("noise", [-0.1, float("nan"), float("inf")])
+def test_input_noise_rejects_invalid_standard_deviation(noise):
+    with pytest.raises(ValueError, match="input_noise_std"):
+        TrainConfig(input_noise_std=noise)
+
+
+def test_input_noise_is_seeded_and_does_not_change_the_source_arrays():
+    X, y = synthetic()
+    original = X.copy()
+    config = replace(FAST, input_noise_std=0.1)
+    predictions = []
+    for _ in range(2):
+        model = make_model(0)
+        fit(model, X, y, config, target_scale=100)
+        predictions.append(predict(model, X, target_scale=100))
+    np.testing.assert_array_equal(predictions[0], predictions[1])
+    np.testing.assert_array_equal(X, original)
+    clean = make_model(0)
+    fit(clean, X, y, FAST, target_scale=100)
+    assert not np.allclose(predictions[0], predict(clean, X, target_scale=100))
+
+
+def test_input_noise_reaches_training_only_and_supports_multiple_inputs():
+    class RecordInputs(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.weight = nn.Parameter(torch.ones(()))
+            self.seen = []
+
+        def forward(self, windows, extra):
+            self.seen.append((self.training, windows.detach().clone(), extra.detach().clone()))
+            return (windows.mean((1, 2)) + extra.mean(1)) * self.weight
+
+    X = np.zeros((64, WINDOW, FEATURES), dtype=np.float32)
+    extra = np.zeros((64, 8), dtype=np.float32)
+    model = RecordInputs()
+    config = TrainConfig(epochs=1, batch_size=64, input_noise_std=0.2)
+    fit(model, (X, extra), np.ones(64), config,
+        validation=((X + 2, extra + 3), np.ones(64)))
+    training, noisy_windows, noisy_extra = model.seen[0]
+    assert training
+    assert noisy_windows.std().item() == pytest.approx(0.2, rel=0.1)
+    assert noisy_extra.std().item() == pytest.approx(0.2, rel=0.1)
+    for training, windows, features in model.seen[1:]:
+        assert not training
+        assert torch.all(windows == 2) and torch.all(features == 3)
+    assert not X.any() and not extra.any()
