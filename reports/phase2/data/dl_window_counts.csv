@@ -1,0 +1,11 @@
+partition,engines,stride_1,stride_2,stride_5
+All training,100,20631,10341,4163
+Fold 1 fit,52,10588,5308,2134
+Fold 1 ES,14,3077,,
+Fold 1 CV,34,6966,,
+Fold 2 fit,53,10812,5421,2181
+Fold 2 ES,14,3167,,
+Fold 2 CV,33,6652,,
+Fold 3 fit,53,10647,5336,2151
+Fold 3 ES,14,2971,,
+Fold 3 CV,33,7013,,

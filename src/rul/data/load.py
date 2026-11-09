@@ -31,6 +31,13 @@ class CMAPSSData(NamedTuple):
     rul_test: pd.Series
 
 
+def load_training(subset: str, data_dir: str | Path = DATA_DIR) -> pd.DataFrame:
+    """Load run-to-failure cycles without opening official test or RUL files."""
+    if subset not in SUBSETS:
+        raise ValueError(f"Unknown subset {subset!r}; expected one of {', '.join(SUBSETS)}")
+    return _read_cycles(Path(data_dir) / f"train_{subset}.txt")
+
+
 def load_subset(subset: str, data_dir: str | Path = DATA_DIR) -> CMAPSSData:
     """Load the train, test and true-RUL files of one C-MAPSS subset.
 

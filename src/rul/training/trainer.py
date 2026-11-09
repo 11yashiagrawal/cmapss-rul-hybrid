@@ -37,6 +37,8 @@ class TrainConfig:
         batch_size: Windows per optimiser step.
         learning_rate: Adam learning rate.
         weight_decay: Adam L2 penalty.
+        input_noise_std: Gaussian noise standard deviation in scaled input units,
+            added to training batches only. Zero disables augmentation.
         grad_clip: Max gradient norm, or ``None`` for no clipping.
         scheduler: ``"cosine"`` (annealed over ``epochs``) or ``"none"``.
         patience: Epochs without a better validation RMSE before stopping.
@@ -55,6 +57,7 @@ class TrainConfig:
     loss: str = "mse"
     device: str = "cpu"
     seed: int = 42
+    input_noise_std: float = 0.0
 
     def __post_init__(self) -> None:
         if self.scheduler not in SCHEDULERS:
@@ -63,6 +66,8 @@ class TrainConfig:
             raise ValueError(f"loss must be one of {tuple(LOSSES)}, got {self.loss!r}")
         if self.epochs < 1 or self.batch_size < 1 or self.patience < 1:
             raise ValueError("epochs, batch_size and patience must be positive")
+        if not np.isfinite(self.input_noise_std) or self.input_noise_std < 0:
+            raise ValueError("input_noise_std must be finite and non-negative")
 
     @classmethod
     def from_dict(cls, values: dict) -> TrainConfig:
@@ -165,6 +170,10 @@ def fit(
     model.to(device)
 
     generator = torch.Generator().manual_seed(config.seed)
+    noise_generator = (
+        torch.Generator(device=device).manual_seed(config.seed)
+        if config.input_noise_std else None
+    )
     loader = DataLoader(
         TensorDataset(*tensors, targets),
         batch_size=config.batch_size,
@@ -189,6 +198,13 @@ def fit(
         total, seen = 0.0, 0
         for *batch, target in loader:
             batch = [b.to(device) for b in batch]
+            if noise_generator is not None:
+                batch = [
+                    b + config.input_noise_std * torch.randn(
+                        b.shape, dtype=b.dtype, device=device, generator=noise_generator
+                    )
+                    for b in batch
+                ]
             target = target.to(device)
             optimizer.zero_grad()
             loss = loss_fn(model(*batch), target)
