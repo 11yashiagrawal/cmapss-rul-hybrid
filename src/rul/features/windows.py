@@ -131,8 +131,8 @@ class WindowPreprocessor(TransformerMixin, BaseEstimator):
 
     def fit(self, train: pd.DataFrame, y: object = None) -> WindowPreprocessor:
         """Learn the kept sensors and their per-regime statistics from training rows."""
-        self.sensors_ = select_sensors(train)
         self.normalizer_ = RegimeNormalizer(self.n_regimes, self.seed).fit(train)
+        self.sensors_ = select_sensors(train, regimes=self.normalizer_.kmeans_.labels_)
         self.cycle_mean_ = float(train["cycle"].mean())
         self.cycle_std_ = float(train["cycle"].std(ddof=0)) or 1.0
         self.feature_columns_ = [*self.sensors_, *(["cycle_z"] if self.include_cycle else [])]

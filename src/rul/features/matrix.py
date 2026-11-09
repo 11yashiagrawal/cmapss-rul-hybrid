@@ -41,8 +41,8 @@ def build_feature_matrices(
 ) -> FeatureMatrices:
     """Fit preprocessing on official training rows and transform both sets."""
     windows = tuple(windows)
-    sensors = select_sensors(train)
     normalizer = RegimeNormalizer(n_regimes=n_regimes, random_state=seed).fit(train)
+    sensors = select_sensors(train, regimes=normalizer.kmeans_.labels_)
     train_scaled = normalizer.transform(add_train_rul(train))
     test_scaled = normalizer.transform(test)
     train_rolled = add_rolling_features(train_scaled, sensors=sensors, windows=windows)
