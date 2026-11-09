@@ -1,0 +1,30 @@
+name: PR branch guard
+
+on:
+  pull_request:
+    # Recheck when a PR is retargeted as well as when its code changes.
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  branch-guard:
+    name: Check PR target branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Allow only this repository's dev branch into main
+        env:
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+        shell: bash
+        run: |
+          if [[ "$GITHUB_BASE_REF" == "main" ]] && \
+             [[ "$GITHUB_HEAD_REF" != "dev" || "$HEAD_REPOSITORY" != "$GITHUB_REPOSITORY" ]]; then
+            echo "::error::PRs must target dev. Only this repository's dev branch may target main."
+            exit 1
+          fi
+          echo "PR branch policy passed."
