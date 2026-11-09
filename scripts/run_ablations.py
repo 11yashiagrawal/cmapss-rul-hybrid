@@ -27,18 +27,17 @@ import hashlib
 import json
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import yaml
 
 from rul.data.load import load_subset
+from rul.evaluation.metrics import STAGES, evaluate
 from rul.evaluation.official import METRICS_DIR
 from rul.training.config import apply_overrides, load_config, run_cv
 from rul.training.runs import save_cv
 
 ROOT = Path(__file__).resolve().parents[1]
 SMOKE = {"training.epochs": 2, "cv.only_folds": [1]}
-STAGES = ("late", "mid", "early")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -92,11 +91,10 @@ def config_key(config: dict) -> str:
 
 
 def stage_rmse(predictions: pd.DataFrame, max_true_rul: float | None) -> dict:
-    """Selection-band RMSE by true-RUL stage: late <= 50 < mid <= 100 < early."""
+    """Selection-band RMSE by true-RUL stage (late <= 50 < mid <= 100 < early), via ``evaluate``."""
     band = predictions if max_true_rul is None else predictions[predictions["rul"] <= max_true_rul]
-    stage = pd.cut(band["rul"], [-np.inf, 50, 100, np.inf], labels=list(STAGES))
-    err = ((band["prediction"] - band["rul"]) ** 2).groupby(stage, observed=False).mean() ** 0.5
-    return {f"{s}_rmse": (None if pd.isna(err[s]) else float(err[s])) for s in STAGES}
+    by_stage = evaluate(band["rul"], band["prediction"])["by_stage"]
+    return {f"{stage}_rmse": by_stage[stage]["rmse"] for stage in STAGES}
 
 
 def run_variant(config: dict, train: pd.DataFrame, cache_dir: Path) -> tuple[dict, pd.DataFrame, bool]:
