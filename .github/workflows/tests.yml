@@ -1,0 +1,59 @@
+name: Tests
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    name: Pytest (CPU)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      MPLBACKEND: Agg
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    steps:
+      - name: Check out the PR merge commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            pyproject.toml
+
+      - name: Install CPU-only PyTorch and project dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Install from the CPU index first; requirements.txt reuses this build.
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -r requirements.txt
+          python -m pip install -e .
+
+      - name: Verify CPU-only PyTorch and project imports
+        run: |
+          python - <<'PY'
+          import torch
+          import rul
+
+          assert torch.version.cuda is None, "Expected a CPU-only PyTorch build"
+          assert torch.version.hip is None, "Expected a CPU-only PyTorch build"
+          print(f"PyTorch {torch.__version__}; rul imported successfully")
+          PY
+
+      - name: Run tests without downloading raw data
+        run: python -m pytest -q -ra
