@@ -150,6 +150,15 @@ def test_uncapped_target_scales_by_the_longest_life(train):
     assert trained.target_scale == add_train_rul(train)["rul"].max()
 
 
+def test_uncapped_target_scale_is_independent_of_training_window_stride():
+    train = engines(3).query("cycle <= 47")
+    trained, _ = refit(
+        train, make_model, lambda: WindowInputs(window=5, stride=5),
+        CONFIG, cap=None, epochs=1,
+    )
+    assert trained.target_scale == add_train_rul(train)["rul"].max()
+
+
 def test_trained_model_predicts_in_frame_row_order(train):
     trained, _ = refit(train, make_model, make_inputs, CONFIG, cap=CAP, epochs=2)
     shuffled = train.sample(frac=1, random_state=3)
