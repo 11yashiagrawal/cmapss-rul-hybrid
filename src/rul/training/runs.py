@@ -16,7 +16,7 @@ Nothing here touches the official test set; that runs once, in #71.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -203,6 +203,18 @@ def _units(frame: pd.DataFrame) -> list[int]:
     return sorted(int(u) for u in frame["unit"].unique())
 
 
+def _selected_folds(labelled: pd.DataFrame, n_splits: int, split_seed: int, only_folds):
+    """Numbered Phase 1 folds, keeping only ``only_folds`` when given."""
+    if only_folds is not None:
+        wanted = set(only_folds)
+        if not wanted or not wanted <= set(range(1, n_splits + 1)):
+            raise ValueError(
+                f"only_folds must be a non-empty subset of 1..{n_splits}, got {list(only_folds)}"
+            )
+    splits = enumerate(group_kfold_splits(labelled, n_splits=n_splits, seed=split_seed), start=1)
+    return [(k, split) for k, split in splits if only_folds is None or k in wanted]
+
+
 def train_on_engines(
     frame: pd.DataFrame,
     make_model: ModelFactory,
@@ -255,6 +267,7 @@ def cross_validate(
     holdout_size: float = 0.2,
     selection_max_rul: float | None = None,
     on_fold: Callable[[int, TrainedModel, pd.DataFrame], None] | None = None,
+    only_folds: Sequence[int] | None = None,
 ) -> CVResult:
     """Score a model on the Phase 1 engine folds.
 
@@ -271,12 +284,13 @@ def cross_validate(
             with the fold's model and its held-out cycles (``rul`` is the
             training label, ``rul_true`` the uncapped RUL). Use it to inspect
             the fold models, e.g. a hybrid's gate on unseen engines.
+        only_folds: Run only these folds (numbered from 1), e.g. ``[1]`` for a
+            quick smoke run; ``None`` runs all of them. The folds themselves
+            don't change.
     """
     labelled = add_train_rul(train, cap=cap).assign(rul_true=add_train_rul(train)["rul"])
     folds, predictions = [], []
-    for k, (train_idx, val_idx) in enumerate(
-        group_kfold_splits(labelled, n_splits=n_splits, seed=split_seed), start=1
-    ):
+    for k, (train_idx, val_idx) in _selected_folds(labelled, n_splits, split_seed, only_folds):
         fold_train, fold_val = labelled.iloc[train_idx], labelled.iloc[val_idx]
         trained, result, holdout_units = train_on_engines(
             fold_train, make_model, make_inputs, config,
@@ -319,6 +333,7 @@ def cross_validate_estimator(
     n_splits: int = 3,
     split_seed: int = 42,
     selection_max_rul: float | None = None,
+    only_folds: Sequence[int] | None = None,
 ) -> CVResult:
     """Like :func:`cross_validate`, for models that fit on frames themselves.
 
@@ -330,9 +345,7 @@ def cross_validate_estimator(
     """
     labelled = add_train_rul(train, cap=cap).assign(rul_true=add_train_rul(train)["rul"])
     folds, predictions = [], []
-    for k, (train_idx, val_idx) in enumerate(
-        group_kfold_splits(labelled, n_splits=n_splits, seed=split_seed), start=1
-    ):
+    for k, (train_idx, val_idx) in _selected_folds(labelled, n_splits, split_seed, only_folds):
         fold_train, fold_val = labelled.iloc[train_idx], labelled.iloc[val_idx]
         estimator = make_estimator().fit(fold_train.drop(columns="rul_true"))
         pred = estimator.predict(fold_val)
