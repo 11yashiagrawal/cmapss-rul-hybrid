@@ -1,0 +1,9 @@
+subset,model,scaling,selection RMSE,± (folds),late RMSE,mid RMSE,early RMSE,all-cycle RMSE,minutes
+FD002,LSTM,per-regime,17.51,1.3,12.02,22.27,16.49,49.12,2.39
+FD002,LSTM,global,18.8,1.59,13.63,22.54,19.72,50.06,5.35
+FD002,Hybrid A,per-regime,18.7,1.07,12.7,23.03,19.33,48.44,1.5
+FD002,Hybrid A,global,18.3,0.36,12.85,21.98,19.42,48.43,2.93
+FD004,LSTM,per-regime,17.99,1.48,12.21,22.9,17.08,77.5,3.11
+FD004,LSTM,global,21.2,1.39,17.58,25.52,18.88,78.68,4.92
+FD004,Hybrid A,per-regime,18.8,1.86,13.01,22.45,20.62,77.09,1.89
+FD004,Hybrid A,global,22.0,1.43,18.43,25.02,22.31,78.47,3.0

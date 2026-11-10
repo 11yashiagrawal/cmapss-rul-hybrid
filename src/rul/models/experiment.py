@@ -35,8 +35,8 @@ class EngineFeatures(TransformerMixin, BaseEstimator):
     def fit(self, X: pd.DataFrame, y: object = None) -> "EngineFeatures":
         """Learn selected sensors and regime statistics from this training fold."""
         if self.engineered:
-            self.sensors_ = select_sensors(X)
             self.normalizer_ = RegimeNormalizer(self.n_regimes, self.seed).fit(X)
+            self.sensors_ = select_sensors(X, regimes=self.normalizer_.kmeans_.labels_)
             self.feature_names_ = ["cycle", *SETTING_COLS, "regime", *self.sensors_]
             self.feature_names_ += [
                 f"{sensor}_{feature}_{window}"

@@ -131,8 +131,8 @@ class WindowPreprocessor(TransformerMixin, BaseEstimator):
 
     def fit(self, train: pd.DataFrame, y: object = None) -> WindowPreprocessor:
         """Learn the kept sensors and their per-regime statistics from training rows."""
-        self.sensors_ = select_sensors(train)
         self.normalizer_ = RegimeNormalizer(self.n_regimes, self.seed).fit(train)
+        self.sensors_ = select_sensors(train, regimes=self.normalizer_.kmeans_.labels_)
         self.cycle_mean_ = float(train["cycle"].mean())
         self.cycle_std_ = float(train["cycle"].std(ddof=0)) or 1.0
         self.feature_columns_ = [*self.sensors_, *(["cycle_z"] if self.include_cycle else [])]
@@ -145,48 +145,3 @@ class WindowPreprocessor(TransformerMixin, BaseEstimator):
         if self.include_cycle:
             scaled["cycle_z"] = (scaled["cycle"] - self.cycle_mean_) / self.cycle_std_
         return scaled
-
-
-class SequencePredictor:
-    """Adapter with ``predict(frame)``, so sequence models plug into ``predict_test_cycles``.
-
-    Builds one padded window per cycle (stride 1) and returns predictions in
-    the row order of ``frame``.
-
-    Args:
-        model: A ``torch.nn.Module`` mapping ``[batch, window, features]`` to ``[batch]``.
-        preprocessor: A fitted :class:`WindowPreprocessor`.
-        window: The window length the model was trained with.
-        batch_size: Windows per forward pass.
-    """
-
-    def __init__(
-        self,
-        model: torch.nn.Module,
-        preprocessor: WindowPreprocessor,
-        window: int = 30,
-        batch_size: int = 1024,
-    ) -> None:
-        self.model = model
-        self.preprocessor = preprocessor
-        self.window = window
-        self.batch_size = batch_size
-
-    def predict(self, frame: pd.DataFrame) -> np.ndarray:
-        """Predict RUL for every row of ``frame``, in its row order."""
-        if not frame.index.is_unique:
-            raise ValueError("frame needs a unique index to return predictions in row order")
-        windows = make_windows(
-            self.preprocessor.transform(frame),
-            self.preprocessor.feature_columns_,
-            window=self.window,
-            target_column=None,
-        )
-        self.model.eval()
-        with torch.no_grad():
-            X = torch.from_numpy(windows.X)
-            out = torch.cat(
-                [self.model(X[i : i + self.batch_size]) for i in range(0, len(X), self.batch_size)]
-            )
-        predictions = pd.Series(out.numpy().astype(float), index=windows.index["row"].to_numpy())
-        return predictions.loc[frame.index].to_numpy()

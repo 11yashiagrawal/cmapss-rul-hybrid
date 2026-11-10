@@ -1,0 +1,5 @@
+comparison,engines,RMSE difference,CI low,CI high,Wilcoxon p,engines better with per-regime,Holm p
+FD002 LSTM,260,-1.3019,-1.8326,-0.7524,0.0,161,0.0001
+FD002 Hybrid A,260,0.4261,-0.7205,1.6678,0.199,139,0.199
+FD004 LSTM,249,-3.2013,-4.0105,-2.3958,0.0,170,0.0
+FD004 Hybrid A,249,-3.1684,-4.3582,-1.9529,0.0,173,0.0
