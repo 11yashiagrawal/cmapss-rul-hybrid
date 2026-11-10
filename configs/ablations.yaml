@@ -1,0 +1,46 @@
+# Ablation variants for #69, run with: python scripts/run_ablations.py
+#
+# Every variant starts from `base` (a model config, relative to this file) and
+# applies its overrides, written as dotted keys like `train_dl.py --set`.
+# An empty mapping `{}` is the base setting itself. Variants that resolve to the
+# same config are trained once and share the result.
+#
+# All variants are scored on the 3 Phase 1 folds with the selection RMSE from
+# dl_base.yaml (#55). The official test set is never used here.
+#
+# The asymmetric-loss variant joins the `loss` group once the trainer has that
+# loss (#69); only `mse` exists today.
+
+base: hybrid_gated.yaml
+
+groups:
+  window:             # does longer history help, and at which life stage?
+    window_15: {inputs.window: 15}
+    window_30: {}
+    window_60: {inputs.window: 60}
+    window_90: {inputs.window: 90}
+
+  cap:                # training-label cap; test engines are always scored uncapped
+    cap_none: {target.cap: null}
+    cap_100: {target.cap: 100}
+    cap_125: {}
+    cap_150: {target.cap: 150}
+
+  features:           # engineered-feature groups in the hybrid's feature branch (#57)
+    features_all: {}
+    features_no_age: {inputs.groups: [sensors, mean, slope, health]}
+    features_current_only: {inputs.groups: [age, sensors]}
+    features_rolling_only: {inputs.groups: [mean, slope, health]}
+
+  cycle:              # cycle index as an extra input to the sequence branch
+    cycle_off: {}
+    cycle_on: {inputs.include_cycle: true}
+
+  loss:
+    loss_mse: {}
+
+  branches:           # which branches the hybrid uses, and how they are joined
+    branch_sequence: {model.fusion: sequence}
+    branch_features: {model.fusion: features}
+    branch_concat: {model.fusion: concat}
+    branch_gated: {}

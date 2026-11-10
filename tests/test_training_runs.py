@@ -202,3 +202,19 @@ def test_save_cv_writes_metrics_json_and_cycle_predictions(train, cv, tmp_path):
     saved = pd.read_csv(paths["predictions"])
     assert list(saved.columns) == ["unit", "cycle", "rul", "fold", "prediction"]
     assert len(saved) == len(train)
+
+
+def test_cv_can_run_a_subset_of_the_same_folds(train, cv):
+    one = cross_validate(
+        train, make_model, make_inputs, CONFIG, cap=CAP, n_splits=3, holdout_size=0.25,
+        selection_max_rul=30, only_folds=[2],
+    )
+    assert [f.fold for f in one.folds] == [2]
+    assert one.folds[0].heldout_units == cv.folds[1].heldout_units
+    assert set(one.predictions["fold"]) == {2}
+
+
+@pytest.mark.parametrize("only_folds", [[], [0], [4]])
+def test_cv_rejects_folds_outside_the_split(train, only_folds):
+    with pytest.raises(ValueError, match="only_folds"):
+        cross_validate(train, make_model, make_inputs, CONFIG, cap=CAP, n_splits=3, only_folds=only_folds)
