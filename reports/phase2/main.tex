@@ -1,0 +1,80 @@
+% Phase 2 report (#81). Each section lives in sections/<name>.tex and is written
+% by its owner (see the section issues); this file only sets up the template,
+% the order and the bibliography.
+% Build from this folder: `tectonic main.tex`, or pdflatex + bibtex (e.g. Overleaf).
+%
+% Until every section has landed, a missing section file prints a visible
+% placeholder instead of breaking the build, so each owner can build with only
+% their own file. The final build must show no placeholder (see README.md).
+
+\documentclass[conference]{IEEEtran}
+
+\usepackage{iftex}
+\ifXeTeX
+  % Tectonic and xelatex: Times-like text to match pdflatex's IEEEtran output.
+  \usepackage{fontspec}
+  \defaultfontfeatures{Extension=.otf, UprightFont=*-regular, BoldFont=*-bold,
+    ItalicFont=*-italic, BoldItalicFont=*-bolditalic}
+  \setmainfont{texgyretermes}
+  \setsansfont{texgyreheros}
+  \setmonofont{texgyrecursor}
+\fi
+\usepackage{cite}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{url}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+
+% \sectionfile{file}{heading}{issue}: input sections/<file>.tex if it exists,
+% otherwise a placeholder section that names the issue still to deliver it.
+\newcommand{\sectionfile}[3]{%
+  \IfFileExists{sections/#1.tex}{\input{sections/#1}}{%
+    \section{#2}\textbf{[Placeholder: \texttt{\detokenize{sections/#1.tex}}, issue~\##3.]}}}
+
+% Bibliography: refs.bib once #80 consolidates it; until then the Phase 1
+% references plus every section fragment that exists.
+\def\bibfiles{../phase1/refs}
+\newcommand{\addbib}[1]{\IfFileExists{sections/#1.bib}{\edef\bibfiles{\bibfiles,sections/#1}}{}}
+\addbib{dl_dataset}\addbib{literature_review}\addbib{theory}
+\addbib{ablations}\addbib{validation}\addbib{interpretability}
+
+\begin{document}
+
+\title{Sequence and Hybrid Deep Models for\\
+Remaining Useful Life Prediction on C-MAPSS:\\
+Phase 2}
+
+\author{\IEEEauthorblockN{Gokul VKS, Milind Bansal, Isha Tomar, Yashi Agrawal and Mohammad Affan Anas}
+\IEEEauthorblockA{Newton School of Technology, Rishihood University\\
+Code and results: \url{https://github.com/vks-g/cmapss-rul-hybrid}}}
+
+\maketitle
+
+\IfFileExists{sections/abstract.tex}{\input{sections/abstract}}{%
+  \begin{abstract}\textbf{[Placeholder: \texttt{sections/abstract.tex}, issue~\#81.]}\end{abstract}}
+
+\sectionfile{introduction}{Introduction}{81}
+\sectionfile{literature_review}{Deep Learning on C-MAPSS}{63}
+
+% target.tex (#55) is a subsection, so it gets its parent heading here.
+\section{Training Target and Model Selection}
+\label{sec:target_selection}
+\IfFileExists{sections/target.tex}{\input{sections/target}}{%
+  \textbf{[Placeholder: \texttt{sections/target.tex}, issue~\#55.]}}
+
+\sectionfile{dl_dataset}{Sequence Dataset and Regularization}{74}
+\sectionfile{theory}{Theory of the Phase 2 Models}{67}
+\sectionfile{architecture}{Model Architectures}{81}
+\sectionfile{hybrid}{Hybrid Architectures}{81}
+\sectionfile{ablations}{Ablation Studies}{75}
+\sectionfile{validation}{Technical Validation}{76}
+\sectionfile{interpretability}{Interpretability}{76}
+\sectionfile{results}{Results and Discussion}{81}
+\sectionfile{conclusion}{Conclusion and Future Work}{81}
+\sectionfile{contributions}{Author Contributions}{81}
+
+\bibliographystyle{IEEEtran}
+\IfFileExists{refs.bib}{\bibliography{refs}}{\bibliography{\bibfiles}}
+
+\end{document}
