@@ -1,0 +1,222 @@
+{
+  "subset": "FD001",
+  "issue": 61,
+  "protocol": {
+    "data": "train_FD001.txt only",
+    "folds": "3 engine-grouped folds, seed 42",
+    "target": "training RUL capped at 125; uncapped shown beside it",
+    "selection_metric": "RMSE on held-out cycles with true (uncapped) RUL <= 130",
+    "choice": "lowest fold-mean selection RMSE per variant, cap and model",
+    "grids": {
+      "random_forest": {
+        "n_estimators": [
+          50,
+          100
+        ],
+        "min_samples_leaf": [
+          1,
+          3
+        ]
+      },
+      "xgboost": {
+        "n_estimators": [
+          100,
+          200
+        ],
+        "max_depth": [
+          3,
+          5
+        ],
+        "learning_rate": [
+          0.05,
+          0.1,
+          0.3
+        ]
+      },
+      "elastic_net": {
+        "model__alpha": [
+          0.1,
+          1.0
+        ],
+        "model__l1_ratio": [
+          0.2,
+          0.8
+        ]
+      }
+    }
+  },
+  "chosen": [
+    {
+      "variant": "raw",
+      "cap": "125",
+      "model": "random_forest",
+      "params": {
+        "min_samples_leaf": 1,
+        "n_estimators": 100
+      },
+      "selection_rmse": {
+        "mean": 19.00297698714026,
+        "std": 0.8253568930831059
+      },
+      "all_cycle_rmse": 48.53496435325999
+    },
+    {
+      "variant": "raw",
+      "cap": "125",
+      "model": "xgboost",
+      "params": {
+        "learning_rate": 0.05,
+        "max_depth": 3,
+        "n_estimators": 200
+      },
+      "selection_rmse": {
+        "mean": 18.895524805133707,
+        "std": 0.8390262822273689
+      },
+      "all_cycle_rmse": 48.33637879477152
+    },
+    {
+      "variant": "raw",
+      "cap": "125",
+      "model": "elastic_net",
+      "params": {
+        "model__alpha": 0.1,
+        "model__l1_ratio": 0.2
+      },
+      "selection_rmse": {
+        "mean": 20.969911325244706,
+        "std": 1.5210251290792987
+      },
+      "all_cycle_rmse": 50.05721089463122
+    },
+    {
+      "variant": "raw",
+      "cap": "none",
+      "model": "random_forest",
+      "params": {
+        "min_samples_leaf": 3,
+        "n_estimators": 100
+      },
+      "selection_rmse": {
+        "mean": 27.795596170840692,
+        "std": 1.176958188538496
+      },
+      "all_cycle_rmse": 37.59421881606108
+    },
+    {
+      "variant": "raw",
+      "cap": "none",
+      "model": "xgboost",
+      "params": {
+        "learning_rate": 0.05,
+        "max_depth": 3,
+        "n_estimators": 100
+      },
+      "selection_rmse": {
+        "mean": 26.951791758021812,
+        "std": 1.1965513793709424
+      },
+      "all_cycle_rmse": 36.992092185983786
+    },
+    {
+      "variant": "raw",
+      "cap": "none",
+      "model": "elastic_net",
+      "params": {
+        "model__alpha": 1.0,
+        "model__l1_ratio": 0.2
+      },
+      "selection_rmse": {
+        "mean": 31.820570666714726,
+        "std": 2.460902682020798
+      },
+      "all_cycle_rmse": 42.02744382108032
+    },
+    {
+      "variant": "engineered",
+      "cap": "125",
+      "model": "random_forest",
+      "params": {
+        "min_samples_leaf": 1,
+        "n_estimators": 100
+      },
+      "selection_rmse": {
+        "mean": 15.159827815911177,
+        "std": 0.7752165975496599
+      },
+      "all_cycle_rmse": 47.956395137335626
+    },
+    {
+      "variant": "engineered",
+      "cap": "125",
+      "model": "xgboost",
+      "params": {
+        "learning_rate": 0.1,
+        "max_depth": 3,
+        "n_estimators": 200
+      },
+      "selection_rmse": {
+        "mean": 14.49214296309321,
+        "std": 0.2170640385359082
+      },
+      "all_cycle_rmse": 47.75205960845315
+    },
+    {
+      "variant": "engineered",
+      "cap": "125",
+      "model": "elastic_net",
+      "params": {
+        "model__alpha": 1.0,
+        "model__l1_ratio": 0.2
+      },
+      "selection_rmse": {
+        "mean": 18.935771270860766,
+        "std": 0.9118434475087901
+      },
+      "all_cycle_rmse": 49.68268374966718
+    },
+    {
+      "variant": "engineered",
+      "cap": "none",
+      "model": "random_forest",
+      "params": {
+        "min_samples_leaf": 1,
+        "n_estimators": 100
+      },
+      "selection_rmse": {
+        "mean": 23.60823015138565,
+        "std": 2.5972363809892283
+      },
+      "all_cycle_rmse": 36.389817279092675
+    },
+    {
+      "variant": "engineered",
+      "cap": "none",
+      "model": "xgboost",
+      "params": {
+        "learning_rate": 0.1,
+        "max_depth": 5,
+        "n_estimators": 200
+      },
+      "selection_rmse": {
+        "mean": 23.82478679679183,
+        "std": 2.8262487981782245
+      },
+      "all_cycle_rmse": 37.479367639631775
+    },
+    {
+      "variant": "engineered",
+      "cap": "none",
+      "model": "elastic_net",
+      "params": {
+        "model__alpha": 1.0,
+        "model__l1_ratio": 0.2
+      },
+      "selection_rmse": {
+        "mean": 33.579486182254236,
+        "std": 1.622266291045623
+      },
+      "all_cycle_rmse": 41.83332767933348
+    }
+  ]
+}
