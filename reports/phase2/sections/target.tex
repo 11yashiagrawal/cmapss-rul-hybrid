@@ -32,10 +32,9 @@ the failure cycle. On FD001 it has a median of 92 cycles and ranges from 59 to
 $K$ is the 90th percentile of the onset RULs in the training fold. A
 candidate cap is scored on held-out engines by
 \begin{equation}
- \mathrm{RMSE}_{\leq K}=\sqrt{\frac{1}{|S|}\sum_{(u,t)\in S}(\hat y_{u,t}-y_{u,t})^2},\quad
- S=\{(u,t):y_{u,t}\leq K\},
+ \mathrm{RMSE}_{\leq K}=\sqrt{\frac{1}{|S|}\sum_{(u,t)\in S}(\hat y_{u,t}-y_{u,t})^2},
 \end{equation}
-where $y$ is the true, uncapped RUL. Cycles above $K$ are dropped because, for
+with $S=\{(u,t):y_{u,t}\leq K\}$ the held-out cycles at or below $K$, where $y$ is the true, uncapped RUL. Cycles above $K$ are dropped because, for
 nine engines in ten, no degradation is visible there yet, and the official
 test engines (cut off before failure) rarely reach those values. Scoring
 every held-out cycle would instead prefer no cap, because a capped model
@@ -60,6 +59,7 @@ Averaged over the three models, the two caps tie (16.38 vs.\ 16.40).
 the 3-fold mean). ``All'': every held-out cycle. ``$\leq K$'': the selection metric.}
 \label{tab:target_caps}
 \footnotesize
+\setlength{\tabcolsep}{2.5pt}
 \begin{tabular}{lcccc}
 \hline
 Model, metric & 100 & 125 & 150 & none \\
