@@ -1,0 +1,158 @@
+% Input from reports/phase2/ with amsmath and
+% cite loaded. New keys: sections/theory.bib; other keys are listed there.
+% Model settings quoted here come from configs/{lstm,tcn,transformer,hybrid_gated,dl_base}.yaml
+% and src/rul/models/; numeric illustrations were computed for this section
+% (receptive fields from rul.models.tcn.receptive_field; NASA-score shift by
+% simulation with Gaussian errors, stated as such).
+
+\section{Theory of the Phase 2 Models}
+\label{sec:theory}
+
+All four sequence models read the same input: a window $X\in\mathrm{R}^{L\times F}$
+of the last $L=30$ cycles of $F$ scaled sensors, labelled with the capped RUL
+of its last cycle. They differ only in how information moves across the $L$
+cycles, and that difference is what this section explains.
+
+\subsection{LSTM: Vanishing Gradients and Gates}
+A plain recurrent network updates $h_t=\tanh(Wh_{t-1}+Ux_t+b)$. Training it
+by backpropagation through time multiplies one Jacobian per step,
+\begin{equation}
+\frac{\partial h_L}{\partial h_t}=\prod_{s=t+1}^{L}\operatorname{diag}\!\bigl(\tanh'(\cdot)\bigr)\,W ,
+\end{equation}
+so the gradient from cycle $t$ shrinks (or grows) roughly like a power of
+$\lVert W\rVert$~\cite{Bengio1994learning,Pascanu2013difficulty}. With a
+factor of 0.9 per step, the first cycle of a 30-cycle window gets
+$0.9^{29}\approx0.05$ of the signal of the last one. Slow wear is exactly a
+long-range pattern, so a plain RNN learns it poorly.
+
+The LSTM~\cite{Hochreiter1997long} adds a cell state $c_t$ and three gates,
+each a sigmoid in $[0,1]$ computed from $x_t$ and $h_{t-1}$:
+\begin{align}
+c_t &= f_t\odot c_{t-1} + i_t\odot\tilde c_t, & h_t &= o_t\odot\tanh(c_t),
+\end{align}
+with forget gate $f_t$, input gate $i_t$, output gate $o_t$ and candidate
+$\tilde c_t=\tanh(W_cx_t+U_ch_{t-1}+b_c)$. Along the cell path,
+$\partial c_t/\partial c_{t-1}=\operatorname{diag}(f_t)$ (plus indirect
+terms). The gradient is therefore scaled by a forget gate the network learns,
+not by a fixed weight matrix: when $f_t\approx1$ the memory, and its gradient,
+pass through almost unchanged~\cite{Gers2000learning}. The input gate decides
+when a new reading is worth writing, which suits C-MAPSS, where most cycles
+are noise around a slow trend. Our LSTM has one layer of 64 units (about
+21,000 weights in the recurrent layer for $F=15$) and uses $h_L$ as the
+window's embedding. The gates do not stop gradients from \emph{exploding},
+which is why the trainer clips the gradient norm at 1.
+
+\subsection{Temporal CNN: Dilated Causal Convolutions}
+A temporal convolutional network (TCN)~\cite{Bai2018empirical} applies 1-D
+convolutions along time. \emph{Causal} padding (zeros on the left only)
+means the output at cycle $t$ depends only on cycles $\leq t$, so no future
+reading leaks in. \emph{Dilation} $d$ spaces the $k$ filter taps $d$ cycles
+apart: $y_t=\sum_{j=0}^{k-1}w_j\,x_{t-jd}$. Our residual blocks hold two such
+convolutions with dilation $2^{\ell}$ at level $\ell=0,\dots,N-1$. Each
+convolution extends the view by $(k-1)d$ cycles, so the last output sees
+\begin{equation}
+R = 1 + 2(k-1)\sum_{\ell=0}^{N-1}2^{\ell} = 1+2(k-1)(2^{N}-1)
+\end{equation}
+cycles. The field doubles with each level while the weight count grows only
+linearly. With $k=3$, two levels see 13 cycles, three see 29 and four see 61.
+Three levels would therefore ignore the oldest cycle of our 30-cycle window,
+which is why the configuration uses four. Unlike the LSTM, the TCN's
+``memory'' is a hard, known number, and every cycle inside it is processed in
+parallel.
+
+\subsection{Transformer: Attention, Positions and Size}
+Self-attention~\cite{Vaswani2017attention} projects each cycle's vector to a
+query $q_t$, key $k_t$ and value $v_t$, and replaces it with a weighted
+average of all values,
+\begin{equation}
+\operatorname{Attn}(Q,K,V)=\operatorname{softmax}\!\Bigl(\frac{QK^\top}{\sqrt{d_k}}\Bigr)V ,
+\end{equation}
+so any two cycles interact in one step, whatever their distance. The
+$\sqrt{d_k}$ keeps the dot products from saturating the softmax. Several
+heads run in parallel and can look for different patterns. Attention is
+order-blind: shuffling the cycles shuffles the output in the same way. A
+sinusoidal code is therefore added to each cycle's vector,
+$\mathrm{PE}_{t,2i}=\sin(t/10000^{2i/d})$ and
+$\mathrm{PE}_{t,2i+1}=\cos(t/10000^{2i/d})$, which gives every position a
+unique pattern that varies smoothly in $t$.
+
+\emph{Why size matters here.} Attention assumes very little about the data
+(no recurrence, no locality), so it must learn that structure from
+examples. FD001 offers about 20,000 windows, but they come from only 100
+engines, and neighbouring windows overlap in 29 of their 30 cycles. The
+effective sample size is much closer to 100 trajectories than to 20,000
+points. A large Transformer would memorize the training engines, so ours
+keeps $d=32$, 4 heads, one pre-norm layer and a feed-forward width of 64,
+roughly 9,000 encoder weights, which is fewer than the LSTM.
+
+\subsection{Gated Fusion}
+The gated hybrid embeds the window with the LSTM ($h_{\mathrm{seq}}$) and the
+engineered features at the window's last cycle with a small MLP
+($h_{\mathrm{feat}}$), both of size $d$, and mixes them per
+dimension~\cite{Arevalo2017gated}:
+\begin{align}
+g&=\sigma\bigl(W[h_{\mathrm{seq}};h_{\mathrm{feat}}]+b\bigr),\\
+z&=g\odot h_{\mathrm{seq}}+(1-g)\odot h_{\mathrm{feat}},\qquad \hat y=\mathrm{head}(z).
+\end{align}
+Unlike plain concatenation~\cite{Chen2021machine,Jin2022bilstm}, the mix can
+change from one window to the next. For example, the network may lean on the
+rolling features early in life and on the sequence near failure.
+
+\emph{What the gate can tell us:} for each window, how much each embedding
+dimension is drawn from each branch, so its average by life stage is a
+useful description. \emph{What it cannot tell us:}
+(i)~$g$ is a mixing weight, not a contribution. A dimension with $g=0.9$ but
+$h_{\mathrm{seq}}\approx0$ adds almost nothing, and the head can amplify or
+ignore any dimension.
+(ii)~The two branches are trained together and can co-adapt, so a feature
+branch that looks unused may still shape what the sequence branch learns.
+(iii)~Averaging $g$ over dimensions hides structure.
+(iv)~Like attention weights~\cite{Jain2019attention}, gate values are not
+causal explanations. The causal check is the ablation: retrain with one
+branch removed (\texttt{fusion: sequence} or \texttt{features}) and compare
+the errors.
+
+\subsection{Regularization and Bias--Variance}
+For squared error, the expected test error at an input splits
+into~\cite{Geman1992neural}
+\begin{equation}
+\mathrm{E}\bigl[(y-\hat f(x))^2\bigr]
+=\underbrace{\bigl(f(x)-\mathrm{E}\hat f(x)\bigr)^2}_{\text{bias}^2}
++\underbrace{\operatorname{Var}\hat f(x)}_{\text{variance}}
++\sigma^2 ,
+\end{equation}
+where the expectation is over training sets. On C-MAPSS, $\sigma^2$ is large
+early in life, because a healthy engine's sensors do not reveal its RUL. The
+cap removes most of that irreducible part from the target. Deep sequence
+models have low bias but high variance on 100 engines: refitting on another
+fold, or with another seed, moves their predictions noticeably. Each
+regularizer trades a little bias for less variance:
+dropout~\cite{Srivastava2014dropout} trains an implicit ensemble of thinned
+networks; weight decay shrinks weights towards zero; input
+noise~\cite{Bishop1995noise} acts like a smoothness penalty; and early
+stopping~\cite{Prechelt1998early} limits how far the optimizer moves from
+small initial weights, judged on engines held out of training. In our study
+(Section~\ref{sec:dl_dataset}) none of these beat the baseline, which already
+had dropout 0.3 and early stopping. The fold standard deviation measures
+variance across data splits, but not across seeds, so repeated seeds are
+still needed to separate the two.
+
+\subsection{Loss Choice and the NASA Score}
+Training minimizes the mean squared error, whose minimizer is the
+conditional mean $\mathrm{E}[y\mid X]$: it treats a prediction 20 cycles too
+late the same as one 20 cycles too early. The PHM08
+score~\cite{Saxena2008damage} does not. With error $e=\hat y-y$ it adds
+$e^{-e/13}-1$ for early and $e^{e/10}-1$ for late predictions, and it is a
+sum over engines, not a mean. At $|e|=20$ a late prediction costs 6.4 against
+3.7 for an early one. At $|e|=40$ it costs 53.6 against 20.7. The score is
+therefore dominated by a few large late errors.
+
+Because of this asymmetry, the best prediction under the NASA score lies
+below the conditional mean. As an illustration, if errors were Gaussian
+with standard deviation 16 cycles, shifting every prediction 4.5 cycles
+earlier would lower the expected score per engine from 4.4 to 3.9 (about
+11\%), while RMSE would rise only from 16.0 to 16.6. That is why we report
+RMSE, MAE and the NASA score together. A model selected on RMSE is not
+automatically the best on the NASA score. An asymmetric training loss, or a
+post-hoc early shift chosen on validation folds, could target the score
+directly, at some cost in RMSE.
