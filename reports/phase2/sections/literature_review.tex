@@ -1,0 +1,146 @@
+% Input from reports/phase2/ with amsmath and
+% cite loaded. New keys: sections/literature_review.bib (consolidate in #80);
+% Phase 1 keys reused from reports/phase1/refs.bib.
+% Every number in Table~\ref{tab:lit_dl} was read from the cited paper's own
+% table (paper, table): Chen2021machine IV; Jin2022bilstm III; Zhang2022dual III;
+% Gupta2026auditing 5; Galchar2026remaining III; Sharma2025uncertainty I.
+
+\section{Deep Learning on C-MAPSS}
+\label{sec:lit_dl}
+
+Phase~1 reviewed feature-based regression on C-MAPSS and noted that
+convolutional and recurrent networks report lower errors than those
+baselines~\cite{SateeshBabu2016deep,Li2018remaining,Zheng2017long}. This
+section looks at the four families of sequence models that Phase~2 implements,
+the numbers they report on FD001, and why those numbers cannot simply be
+ranked.
+
+\subsection{Recurrent Networks}
+An LSTM~\cite{Hochreiter1997long} reads a window of sensor readings one cycle
+at a time and keeps a gated memory, so it can carry a slow wear trend across
+the window. Zheng et al.~\cite{Zheng2017long} established the
+window-plus-LSTM recipe on C-MAPSS. Chen et al.~\cite{Chen2021machine} kept
+that recipe (window 30, ten runs averaged) and asked what an LSTM is missing.
+In their ablation, the plain LSTM reached an FD001 RMSE of 15.43. Adding
+attention over time steps lowered it to 15.27, adding handcrafted features
+lowered it to 14.81, and doing both lowered it to 14.54. Handcrafted features
+helped more than attention. Jin et al.~\cite{Jin2022bilstm} pushed the same
+idea further, with a bidirectional LSTM on the raw sensors (12.58) and a second
+stream on handcrafted feature flows, fused by addition (11.96).
+
+\subsection{Convolutional and Temporal Convolutional Networks}
+A 1D convolution slides learned filters along the time axis of a window, so it
+picks up local patterns, such as a short rise in temperature, in parallel
+rather than step by step~\cite{SateeshBabu2016deep,Li2018remaining}. A
+temporal convolutional network (TCN)~\cite{Bai2018empirical} makes the
+convolutions causal (each output sees only the past) and dilated (gaps between
+filter taps grow layer by layer), so its receptive field grows exponentially
+with depth. That lets a few layers cover a whole window. In a single-seed
+comparison, Galchar et al.~\cite{Galchar2026remaining} report an FD001 RMSE of
+16.97 for a 1D CNN and 14.93 for an LSTM under the same protocol. TCN variants
+also appear in comparison tables of later papers~\cite{Zhang2022dual}, but we
+could not check a TCN result on FD001 against an open primary source, so none
+is quoted here.
+
+\subsection{Transformers}
+Self-attention~\cite{Vaswani2017attention} lets every cycle in the window look
+at every other cycle directly, instead of passing information along a chain.
+Mo et al.~\cite{Mo2021remaining} combine a Transformer encoder with a gated
+convolutional unit for local features. Zhang et al.~\cite{Zhang2022dual}
+(DAST) use two attention encoders, one across sensors and one across time
+steps, and report an FD001 RMSE of 11.43 (window 40, ten runs). Transformers
+have many parameters for a training set of only 100 engines, so these results
+depend heavily on regularization and on the protocol details below.
+
+\subsection{Hybrid Models}
+The strongest recurrent results above are already hybrids. They pair a learned
+sequence representation with handcrafted
+features~\cite{Chen2021machine,Jin2022bilstm}, which is the idea behind our
+gated hybrid. Sharma~\cite{Sharma2025uncertainty} stacks multi-scale
+convolutions, a bidirectional LSTM and attention, and adds a probabilistic
+output that predicts its own uncertainty. That model reports 17.25 on FD001 as
+an average over runs and 16.22 for its best run.
+
+\begin{table*}[t]
+\centering
+\caption{FD001 test RMSE reported by deep and hybrid models. Every value was
+read from the paper's own results table. Cap: training RUL cap. Test capped:
+whether test labels were also capped. ``n.s.'': not stated. $^\dagger$Preprint.}
+\label{tab:lit_dl}
+\footnotesize
+\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{llccccc}
+\hline
+Paper & Model & RMSE & Cap & Test capped & Window & Runs \\
+\hline
+Chen~\cite{Chen2021machine} & LSTM & 15.43 & n.s.$^a$ & n.s. & 30 & 10 \\
+ & LSTM + features & 14.81 & & & & \\
+ & + attention & 14.54$^b$ & & & & \\
+Jin~\cite{Jin2022bilstm} & Bi-LSTM & 12.58 & 125 & n.s. & 30 & n.s. \\
+ & two-stream & 11.96 & & & & \\
+Zhang (DAST)~\cite{Zhang2022dual} & DAST & 11.43 & 125 & n.s. & 40$^c$ & 10 \\
+Gupta~\cite{Gupta2026auditing}$^\dagger$ & LSTM & 15.97$\pm$0.45 & 125 & no & 30 & 5 seeds \\
+Galchar~\cite{Galchar2026remaining}$^\dagger$ & LSTM & 14.93 & 130 & n.s. & 30 & 1 seed \\
+ & 1D CNN & 16.97 & & & & \\
+ & Ridge & 16.63 & & & & \\
+Sharma~\cite{Sharma2025uncertainty}$^\dagger$ & CNN-BiLSTM-att. & 17.25$^d$ & 125 & n.s. & 30 & n.s. \\
+\hline
+Ours, Phase 1 & Random Forest & 16.21 & 125 & no & --- & 1 seed \\
+\hline
+\end{tabular}
+
+\smallskip
+\raggedright\scriptsize
+$^a$Piecewise-linear target; the maximum is not given.
+$^b$Table~IV; the same model is 14.53 in their Table~V.
+$^c$4 of the 100 FD001 test engines are shorter than 40 cycles; padding is not described.
+$^d$Mean over runs; best run 16.22.
+\end{table*}
+
+\subsection{Why the Numbers Disagree}
+The spread in Table~\ref{tab:lit_dl} (11.4 to 17.3 for broadly similar models)
+is not only about architecture. Six protocol choices move the result.
+\begin{enumerate}
+\item \emph{Cap and test labels.} The training cap changes what the model
+learns. Capping the test labels as well changes the exam itself: 11 of the
+100 FD001 test engines have a true RUL above 125 (the maximum is 145), and a
+capped label erases most of their error. Several papers state the cap for
+training but do not say how test labels were treated.
+\item \emph{Window length.} Longer windows give more history, but FD001's
+shortest test engine has only 31 cycles, so any window above 31 needs padding,
+which is rarely described. Chen et al.~\cite{Chen2021machine} found FD001
+RMSE was best at 30 and worse for both shorter and longer windows.
+\item \emph{Seeds and reporting.} Gupta~\cite{Gupta2026auditing} measures a
+seed standard deviation of 0.45 RMSE for an FD001 LSTM. Gaps between papers
+smaller than about one cycle are therefore within run-to-run noise. Reporting
+a single seed, or the best run instead of the mean~\cite{Sharma2025uncertainty},
+makes a result look better than a repeat would.
+\item \emph{Model selection on the test set.} C-MAPSS has no official
+validation split, so when a paper tunes architecture or epochs on the test
+engines, the test RMSE becomes optimistic. Papers rarely say which split
+was used for tuning.
+\item \emph{Copied baselines.} Comparison tables often copy baseline numbers
+from earlier papers, each with its own protocol~\cite{Zhang2022dual,Jin2022bilstm}.
+Even one paper's own tables can disagree in the last digit (14.54 vs.\ 14.53
+in~\cite{Chen2021machine}).
+\item \emph{Preprocessing.} Sensor selection and normalization matter little
+on FD001, which has one operating condition, but they dominate on FD002 and
+FD004~\cite{Gupta2026auditing}. In Gupta's grid, architecture explains 75\% of
+the FD001 RMSE variation, while on FD002 and FD004 the largest shares go to
+the RUL cap and normalization.
+\end{enumerate}
+These are the same comparability problems that Ramasso and
+Saxena~\cite{Ramasso2014performance} described for the earlier literature.
+
+\subsection{Where Our Protocol Sits}
+We train on FD001 with a cap of 125, chosen from training engines only
+(Section~\ref{sec:target}). The official test labels stay uncapped, as
+provided. Windows are 30 cycles long, with first-cycle padding. All model and
+hyperparameter choices are made with engine-grouped cross-validation on the
+training engines, and the official test set is opened once for the frozen
+models. This places us closest to Gupta's audit~\cite{Gupta2026auditing}: the
+same cap, uncapped test labels, the same window and several seeds. His LSTM at
+$15.97\pm0.45$ and our Phase~1 capped Random Forest at 16.21 are therefore the
+fair reference points for our deep models. The lower values in
+Table~\ref{tab:lit_dl} come from protocols that are partly unstated, and
+should not be treated as a target that a correct implementation must reach.
