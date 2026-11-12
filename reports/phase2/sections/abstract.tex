@@ -1,0 +1,35 @@
+% Abstract and index terms (#81, part "Abstract and introduction"; owner: 11yashiagrawal).
+% Cross-validation numbers: results/metrics/fd001_rul_cap_choice.json (#55),
+% fd001_ml_capped_cv.json (#61), fd001_cv_{lstm,tcn,transformer}{,_uncapped}.json,
+% fd001_hybrid_value_test.json (#68). Official-test numbers arrive with #71:
+% every \pending{} must be replaced before the final build.
+
+\providecommand{\pending}[1]{\textbf{[#1]}\typeout{Placeholder: pending #1}}
+
+\begin{abstract}
+Remaining useful life (RUL) prediction estimates how many cycles an engine has
+left before it fails. Phase~1 of this project built feature-based
+machine-learning baselines on the NASA C-MAPSS subset FD001. Phase~2 asks
+whether deep models that read the raw sensor sequence do better under the same
+leakage-controlled protocol. We first choose the training cap from the
+training engines alone: a health index, a hinge fit per engine and the 90th
+percentile of the onset RUL rule out caps of 150 and no cap, and support 125.
+We then compare an LSTM, a temporal convolutional network and a Transformer,
+which share one encoder--head contract, with Random Forest, XGBoost and
+Elastic Net retuned on the same capped target and selection metric, and with
+two hybrids that fuse a sequence encoder with engineered features. In
+engine-grouped cross-validation, the training target matters far more than the
+architecture: removing the cap costs every deep encoder 13 to 15 cycles of
+RMSE, while the three encoders lie within 1.7 cycles of each other (15.6 to
+17.2). The LSTM and Transformer beat machine learning on raw sensors by about
+three cycles, but XGBoost on the Phase~1 engineered features remains best (14.5).
+Neither hybrid beats its best single branch on accuracy under a test fixed in
+advance; gated fusion only lowers the variance across seeds. On the 100
+official test engines, scored once after the model freeze,
+\pending{\#71: final test RMSE and NASA score of the frozen models}.
+\end{abstract}
+
+\begin{IEEEkeywords}
+remaining useful life, predictive maintenance, C-MAPSS, LSTM, temporal
+convolutional network, Transformer, hybrid models, evaluation protocol
+\end{IEEEkeywords}

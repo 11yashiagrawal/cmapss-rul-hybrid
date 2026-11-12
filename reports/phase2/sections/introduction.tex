@@ -1,0 +1,63 @@
+% Introduction (#81, part "Abstract and introduction"; owner: 11yashiagrawal).
+% Sources for numbers are listed in abstract.tex. Phase 1 numbers:
+% results/metrics/fd001_test.json and fd001_test_capped125.json.
+
+\section{Introduction}
+\label{sec:introduction}
+
+An engine that fails in service grounds the aircraft, while one that is
+overhauled too early wastes useful life. Predictive maintenance estimates an
+engine's remaining useful life (RUL) from its own sensor history. Most
+data-driven work on this problem uses NASA's C-MAPSS
+simulations~\cite{Saxena2008damage}: every training engine runs until it fails,
+and every test engine stops at an unknown point before failure.
+
+Phase~1 of this project built feature-based baselines on FD001, the subset
+with one operating condition and one fault mode, under a protocol fixed for
+both phases. The protocol splits by engine, refits every preprocessing step
+inside each training fold, and scores each official test engine once, at its
+last cycle. The best Phase~1 model, a Random Forest on 155 engineered rolling
+features, reached a test RMSE of 27.55 cycles on the uncapped target. Capping
+the training target at 125 cycles lowered it to 16.21. Two questions were left
+open. First, the cap had been taken from the literature and was already known
+to work on the test set, so it was not a fair choice. Second, fixed rolling
+summaries may miss degradation patterns that a model reading the whole
+sequence could find~\cite{Zheng2017long}.
+
+Phase~2 addresses both questions. Published deep-learning results on FD001
+range from about 11 to 17 cycles, but they use different caps, test labels,
+windows and numbers of runs (Section~\ref{sec:lit_dl}), so they cannot tell us
+whether a sequence model beats a strong feature baseline. We therefore compare
+the two families under one protocol and one target, and ask three questions:
+\begin{enumerate}
+\item Do deep sequence models beat machine learning on engineered features,
+  when both train on the same capped target and are selected with the same
+  metric?
+\item Which way of reading the window works best on FD001: recurrence (LSTM),
+  dilated convolution (temporal CNN) or attention (Transformer)?
+\item Does fusing a sequence encoder with the engineered features add value
+  beyond the better of the two, under a test fixed in advance?
+\end{enumerate}
+
+The contributions of this phase are:
+\begin{itemize}
+\item a rule that chooses the RUL cap from training engines alone (health
+  index, hinge-onset RUL, 90th percentile), together with the selection metric
+  (RMSE on cycles with true RUL $\leq K$) used for all tuning;
+\item a shared encoder--head contract under which the LSTM, temporal CNN and
+  Transformer differ only in their encoder, and machine-learning baselines
+  retuned on the same target and metric;
+\item two hybrids, gated fusion and a two-stage model, judged by a value test
+  set in advance: a paired bootstrap, a Holm-corrected Wilcoxon test, or lower
+  variance across seeds;
+\item ablations, technical validation and interpretability analyses, and a
+  single run on the official test set after the model freeze.
+\end{itemize}
+
+Section~\ref{sec:lit_dl} reviews deep learning on C-MAPSS.
+Section~\ref{sec:target_selection} chooses the cap and the selection metric,
+Section~\ref{sec:dl_dataset} builds the sequence dataset,
+Section~\ref{sec:theory} explains the models and Section~\ref{sec:architecture}
+the shared architecture. The hybrid models, ablations, validation,
+interpretability and the official results follow, and the last section
+concludes.
