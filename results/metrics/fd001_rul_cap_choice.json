@@ -1,0 +1,214 @@
+{
+  "subset": "FD001",
+  "issue": 55,
+  "protocol": {
+    "data": "train_FD001.txt only; official test and RUL files are not opened",
+    "folds": "3 engine-grouped folds per seed",
+    "seeds": [
+      42,
+      1,
+      2,
+      3,
+      4
+    ],
+    "caps": [
+      "none",
+      "100",
+      "125",
+      "150"
+    ],
+    "models": {
+      "random_forest": {
+        "n_estimators": 100,
+        "min_samples_leaf": 1,
+        "n_jobs": -1
+      },
+      "xgboost": {
+        "n_estimators": 200,
+        "max_depth": 5,
+        "n_jobs": -1
+      },
+      "elastic_net": {
+        "model__alpha": 1.0,
+        "model__l1_ratio": 0.2
+      }
+    },
+    "features": "Phase 1 engineered features, fitted per training fold",
+    "selection_metric": "RMSE on held-out cycles with true (uncapped) RUL <= K",
+    "k_rule": "90th percentile of per-engine hinge-onset RUL, estimated on the training part of each fold"
+  },
+  "k_by_fold": [
+    {
+      "seed": 1,
+      "fold": 0,
+      "k": 131.5
+    },
+    {
+      "seed": 1,
+      "fold": 1,
+      "k": 132.4
+    },
+    {
+      "seed": 1,
+      "fold": 2,
+      "k": 127.39999999999999
+    },
+    {
+      "seed": 2,
+      "fold": 0,
+      "k": 137.0
+    },
+    {
+      "seed": 2,
+      "fold": 1,
+      "k": 125.6
+    },
+    {
+      "seed": 2,
+      "fold": 2,
+      "k": 127.39999999999999
+    },
+    {
+      "seed": 3,
+      "fold": 0,
+      "k": 134.0
+    },
+    {
+      "seed": 3,
+      "fold": 1,
+      "k": 127.39999999999999
+    },
+    {
+      "seed": 3,
+      "fold": 2,
+      "k": 131.0
+    },
+    {
+      "seed": 4,
+      "fold": 0,
+      "k": 131.5
+    },
+    {
+      "seed": 4,
+      "fold": 1,
+      "k": 125.6
+    },
+    {
+      "seed": 4,
+      "fold": 2,
+      "k": 131.4
+    },
+    {
+      "seed": 42,
+      "fold": 0,
+      "k": 134.0
+    },
+    {
+      "seed": 42,
+      "fold": 1,
+      "k": 131.8
+    },
+    {
+      "seed": 42,
+      "fold": 2,
+      "k": 123.19999999999999
+    }
+  ],
+  "chosen_cap_counts": {
+    "125": 9,
+    "100": 6
+  },
+  "mean_rmse_by_cap": {
+    "rmse_selected": {
+      "elastic_net": {
+        "100": 17.942,
+        "125": 18.682,
+        "150": 22.866,
+        "none": 32.686
+      },
+      "random_forest": {
+        "100": 15.618,
+        "125": 14.965,
+        "150": 17.416,
+        "none": 23.566
+      },
+      "xgboost": {
+        "100": 15.571,
+        "125": 15.539,
+        "150": 18.19,
+        "none": 24.969
+      }
+    },
+    "rmse_all": {
+      "elastic_net": {
+        "100": 58.335,
+        "125": 49.344,
+        "150": 44.222,
+        "none": 41.003
+      },
+      "random_forest": {
+        "100": 58.335,
+        "125": 47.939,
+        "150": 41.224,
+        "none": 36.725
+      },
+      "xgboost": {
+        "100": 58.173,
+        "125": 47.942,
+        "150": 41.679,
+        "none": 38.856
+      }
+    }
+  },
+  "percentile_sensitivity": {
+    "50": {
+      "k_mean": 90.23333333333333,
+      "chosen_cap_counts": {
+        "100": 15
+      }
+    },
+    "60": {
+      "k_mean": 96.69333333333336,
+      "chosen_cap_counts": {
+        "100": 15
+      }
+    },
+    "70": {
+      "k_mean": 102.11333333333334,
+      "chosen_cap_counts": {
+        "100": 15
+      }
+    },
+    "75": {
+      "k_mean": 106.16666666666667,
+      "chosen_cap_counts": {
+        "100": 15
+      }
+    },
+    "80": {
+      "k_mean": 109.85333333333332,
+      "chosen_cap_counts": {
+        "100": 15
+      }
+    },
+    "85": {
+      "k_mean": 116.58666666666666,
+      "chosen_cap_counts": {
+        "100": 15
+      }
+    },
+    "90": {
+      "k_mean": 130.07999999999998,
+      "chosen_cap_counts": {
+        "125": 9,
+        "100": 6
+      }
+    },
+    "95": {
+      "k_mean": 140.89666666666668,
+      "chosen_cap_counts": {
+        "125": 15
+      }
+    }
+  }
+}
